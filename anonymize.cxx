@@ -327,11 +327,11 @@ void *ReadFilesThread(void *voidparams) {
     try {
       if (!reader.Read()) {
         std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
-        break;
+        continue;
       }
     } catch (...) {
       std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
-      break;
+      continue;
     }
 
     const gdcm::Image &image = reader.GetImage();
