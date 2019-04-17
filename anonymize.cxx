@@ -30,6 +30,7 @@
 
 #include <pthread.h>
 #include <stdio.h>
+#include <thread>
 
 struct threadparams {
   const char **filenames;
@@ -327,7 +328,12 @@ void *ReadFilesThread(void *voidparams) {
     try {
       if (!reader.Read()) {
         std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
-        continue;
+	// lets try again
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	if (!reader.Read()) {
+	  std::cerr << "Failed second time to read: \"" << filename << "\" in thread " << params->thread << std::endl;
+	  continue;
+	}	
       }
     } catch (...) {
       std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
