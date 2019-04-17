@@ -5,8 +5,18 @@ project (anonymize)
 # set (CMAKE_CXX_STANDARD 11)
 set (CMAKE_CXX_STANDARD 11)
 
+FIND_LIBRARY(LIBXML2_LIBRARY NAMES xml2)
+FIND_LIBRARY(JPEG_LIBRARY NAMES jpeg)
+FIND_LIBRARY(ZLIB_LIBRARY NAMES z)
+FIND_LIBRARY(XLST_LIBRARY NAMES exslt)
+
+message(STATUS LIBXML2_LIBRARY = ${LIBXML2_LIBRARY})
+message(STATUS JPEG_LIBRARY = ${JPEG_LIBRARY})
+message(STATUS ZLIB_LIBRARY = ${ZLIB_LIBRARY})
+message(STATUS XLST_LIBRARY = ${XLST_LIBRARY})
+
 add_executable (anonymize anonymize.cxx ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories (anonymize PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/DataDictionary/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/DataStructureAndEncodingDefinition)
+target_include_directories (anonymize PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/DataDictionary/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/DataStructureAndEncodingDefinition ${LIBXML2_INCLUDE_DIR})
 
 SET(GDCM_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin/)
 link_directories(anonymize ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin/)
@@ -17,8 +27,8 @@ FIND_LIBRARY(DSED_LIBRARY       NAMES gdcmDSED       PATHS ${GDCM_LIB_PATH} NO_D
 FIND_LIBRARY(DICT_LIBRARY       NAMES gdcmDICT       PATHS ${GDCM_LIB_PATH} NO_DEFAULT_PATH)
 
 
-message(AUTHOR_WARNING ${COMMON_LIBRARY})
-message(AUTHOR_WARNING ${IOD_LIBRARY})
+#message(AUTHOR_WARNING ${COMMON_LIBRARY})
+#message(AUTHOR_WARNING ${IOD_LIBRARY})
+message(STATUS COMMON_LIBRARY = ${COMMON_LIBRARY})
 
-
-target_link_libraries(anonymize ${COMMON_LIBRARY} ${IOD_LIBRARY} ${MSFF_LIBRARY} ${DICT_LIBRARY} ${DSED_LIBRARY} pthread)
+target_link_libraries(anonymize ${COMMON_LIBRARY} ${IOD_LIBRARY} ${MSFF_LIBRARY} ${DICT_LIBRARY} ${DSED_LIBRARY} ${LIBXML2_LIBRARY} ${JPEG_LIBRARY} ${ZLIB_LIBRARY} ${XLST_LIBRARY} pthread)
