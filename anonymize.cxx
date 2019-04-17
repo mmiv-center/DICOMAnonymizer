@@ -325,11 +325,11 @@ void *ReadFilesThread(void *voidparams) {
     reader.SetFileName(filename);
     try {
       if (!reader.Read()) {
-        std::cerr << "Failed to read: " << filename << std::endl;
+        std::cerr << "Failed to read: \"" << filename << "\"" << std::endl;
         break;
       }
     } catch (...) {
-      std::cerr << "Failed to read: " << filename << std::endl;
+      std::cerr << "Failed to read: \"" << filename << "\"" << std::endl;
       break;
     }
 
@@ -452,7 +452,7 @@ void *ReadFilesThread(void *voidparams) {
     writer.SetFileName(outfilename.c_str());
     try {
       if (!writer.Write()) {
-	fprintf(stderr, "Error writing file \"%s\" to \"%s\".\n", filename, outfilename.c_str());
+	fprintf(stderr, "Error [%d] writing file \"%s\" to \"%s\".\n", file, filename, outfilename.c_str());
       }
     } catch (const std::exception& ex) {
       std::cout << "Caught exception \"" << ex.what() << "\"\n";
