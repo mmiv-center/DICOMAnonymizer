@@ -569,7 +569,7 @@ const option::Descriptor usage[] = {
     {BYSERIES, 0, "b", "byseries", Arg::None,
      "  --byseries, -b  \tWrites each DICOM file into a separate directory "
      "by image series."},
-    {NUMTHREADS, 0, "t", "numthreads", Arg::None,
+    {NUMTHREADS, 0, "t", "numthreads", Arg::Required,
      "  --numthreads, -t  \tHow many threads should be used (default 4)." },
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
