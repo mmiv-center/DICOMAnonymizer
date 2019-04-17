@@ -39,6 +39,7 @@ struct threadparams {
   std::string patientid;
   int dateincrement;
   bool byseries;
+  int thread; // number of the thread
 };
 
 nlohmann::json work = nlohmann::json::array({
@@ -325,11 +326,11 @@ void *ReadFilesThread(void *voidparams) {
     reader.SetFileName(filename);
     try {
       if (!reader.Read()) {
-        std::cerr << "Failed to read: \"" << filename << "\"" << std::endl;
+        std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
         break;
       }
     } catch (...) {
-      std::cerr << "Failed to read: \"" << filename << "\"" << std::endl;
+      std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
       break;
     }
 
@@ -452,7 +453,7 @@ void *ReadFilesThread(void *voidparams) {
     writer.SetFileName(outfilename.c_str());
     try {
       if (!writer.Write()) {
-	fprintf(stderr, "Error [%d] writing file \"%s\" to \"%s\".\n", file, filename, outfilename.c_str());
+	fprintf(stderr, "Error [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
       }
     } catch (const std::exception& ex) {
       std::cout << "Caught exception \"" << ex.what() << "\"\n";
@@ -505,7 +506,8 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
     params[thread].patientid = patientid;
     params[thread].nfiles = partition;
     params[thread].dateincrement = dateincrement;
-    params[thread].byseries = byseries;
+    params[thread].byseries  = byseries;
+    params[thread].thread    = thread;
     if (thread == nthreads - 1) {
       // There is slightly more files to process in this thread:
       params[thread].nfiles += nfiles % nthreads;
