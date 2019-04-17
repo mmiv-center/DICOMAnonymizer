@@ -573,8 +573,7 @@ const option::Descriptor usage[] = {
      "  --numthreads, -t  \tHow many threads should be used (default 4)." },
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
-     "  anonymize --input directory --output directory --patientid bla "
-     "--dateincrement 42\n"
+     "  anonymize --input directory --output directory --patientid bla -d 42 -b"
      "  anonymize --help\n"},
     {0, 0, 0, 0, 0, 0}};
 
