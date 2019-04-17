@@ -31,6 +31,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <thread>
+#include <chrono>
 
 struct threadparams {
   const char **filenames;
