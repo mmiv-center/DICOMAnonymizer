@@ -26,8 +26,7 @@ Options:
   --numthreads, -t     How many threads should be used (default 4).
 
 Examples:
-  anonymize --input directory --output directory --patientid bla --dateincrement
-42
+  anonymize --input directory --output directory --patientid bla -d 42 -b
   anonymize --help
 ```
 

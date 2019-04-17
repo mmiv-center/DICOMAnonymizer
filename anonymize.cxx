@@ -24,6 +24,9 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <exception>
+#include <stdexcept>
+
 
 #include <pthread.h>
 #include <stdio.h>
@@ -447,8 +450,12 @@ void *ReadFilesThread(void *voidparams) {
     writer.SetFile(fileToAnon);
 
     writer.SetFileName(outfilename.c_str());
-    if (!writer.Write()) {
-      fprintf(stderr, "Error writing file \"%s\" to \"%s\".\n", filename, outfilename.c_str());
+    try {
+      if (!writer.Write()) {
+	fprintf(stderr, "Error writing file \"%s\" to \"%s\".\n", filename, outfilename.c_str());
+      }
+    } catch (const std::exception& ex) {
+      std::cout << "Caught exception \"" << ex.what() << "\"\n";
     }
   }
   return voidparams;
