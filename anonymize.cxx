@@ -448,7 +448,7 @@ void *ReadFilesThread(void *voidparams) {
 
     writer.SetFileName(outfilename.c_str());
     if (!writer.Write()) {
-      fprintf(stderr, "Error writing file to \"%s\".\n", outfilename.c_str());
+      fprintf(stderr, "Error writing file \"%s\" to \"%s\".\n", filename, outfilename.c_str());
     }
   }
   return voidparams;
