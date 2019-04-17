@@ -553,7 +553,7 @@ const option::Descriptor usage[] = {
      "Options:"},
     {HELP, 0, "", "help", Arg::None,
      "  --help  \tAnonymize DICOM images. Read DICOM image series and write "
-     "out an annonymized version of the files based on the recommendations of "
+     "out an anonymized version of the files based on the recommendations of "
      "the cancer imaging archive."},
     {INPUT, 0, "i", "input", Arg::Required,
      "  --input, -i  \tInput directory."},
