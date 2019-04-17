@@ -8,3 +8,5 @@ RUN cd /root && git clone https://github.com/mmiv-center/DICOMAnonymizer.git && 
     wget https://github.com/malaterre/GDCM/archive/v2.8.9.tar.gz && \
     tar xzvf v2.8.9.tar.gz && mkdir gdcm-build && cd gdcm-build && cmake -DGDCM_BUILD_SHARED_LIBS=ON ../GDCM-2.8.9 && \
     make && cd .. && cmake . && make
+
+ENTRYPOINT [ "/root/DICOMAnonymizer/anonymize" ]
