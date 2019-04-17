@@ -6,7 +6,7 @@ project (anonymize)
 set (CMAKE_CXX_STANDARD 11)
 
 add_executable (anonymize anonymize.cxx ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories (anonymize PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/DataDictionary/)
+target_include_directories (anonymize PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataDictionary/)
 
 SET(GDCM_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin/)
 link_directories(anonymize ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin/)
