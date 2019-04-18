@@ -470,9 +470,11 @@ void *ReadFilesThread(void *voidparams) {
     try {
       if (!writer.Write()) {
         fprintf(stderr, "Error [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
+        fprintf(stderr, "ERROR: %s\n", gdcm::System::GetLastSystemError());
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         if (!writer.Write()) {
           fprintf(stderr, "Error second time [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
+          fprintf(stderr, "ERROR (second time): %s\n", gdcm::System::GetLastSystemError());
         }
       }
     } catch (const std::exception &ex) {
@@ -496,7 +498,7 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
                const char *projectname) {
   // \precondition: nfiles > 0
   assert(nfiles > 0);
-  const char *reference = filenames[0]; // take the first image as reference
+/*  const char *reference = filenames[0]; // take the first image as reference
 
   gdcm::ImageReader reader;
   reader.SetFileName(reference);
@@ -511,7 +513,7 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
   const unsigned int *dims = image.GetDimensions();
   unsigned short pixelsize = pixeltype.GetPixelSize();
   (void)pixelsize;
-  assert(image.GetNumberOfDimensions() == 2);
+  assert(image.GetNumberOfDimensions() == 2); */
 
   const unsigned int nthreads = numthreads; // how many do we want to use?
   threadparams params[nthreads];
@@ -745,8 +747,7 @@ int main(int argc, char *argv[]) {
     const char **filenames = new const char *[chunkSize];
     int filesInChunk = 0;
     unsigned int idx = 0;
-    for (unsigned int i = 0; i < nfiles; ++i)
-    {
+    for (unsigned int i = 0; i < nfiles; ++i) {
       if (i >= (currentChunk * chunkSize)) { // change to the next chunk
         if (filesInChunk > 0) {
           fprintf(stdout, "Send for ReadFiles %d files.\n", filesInChunk);
