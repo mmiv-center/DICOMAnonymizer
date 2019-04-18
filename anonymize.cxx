@@ -455,8 +455,10 @@ void *ReadFilesThread(void *voidparams) {
 			DIR *dir = opendir(dn.c_str());
 			if ( ENOENT == errno)	{
 				mkdir(dn.c_str(), 0700);
-			}
-  		fn = params->outputdir + "/" + seriesdirname + "/" + filenamestring + ".dcm";
+			} else {
+        closedir(dir);
+      }
+      fn = params->outputdir + "/" + seriesdirname + "/" + filenamestring + ".dcm";
 		}
 
 		fprintf(stdout, "[%d] write to file: %s\n", params->thread, fn.c_str());
