@@ -39,6 +39,7 @@ struct threadparams {
   char *scalarpointer;
   std::string outputdir;
   std::string patientid;
+  std::string projectname;
   int dateincrement;
   bool byseries;
   int thread; // number of the thread
@@ -381,6 +382,12 @@ void *ReadFilesThread(void *voidparams) {
       int a = strtol(tag1.c_str(), NULL, 16);
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
+      if (which == "BlockOwner" && what != "replace") {
+        anon.Replace(gdcm::Tag(a, b), what.c_str());
+      }
+      if (which == "ProjectName") {
+        anon.Replace(gdcm::Tag(a, b), params->projectname.c_str());
+      }
       if (what == "replace")
         anon.Replace(gdcm::Tag(a, b), which.c_str());
       if (what == "remove")
@@ -390,8 +397,7 @@ void *ReadFilesThread(void *voidparams) {
       if (what == "hashuid") {
         std::string val = sf.ToString(gdcm::Tag(a, b));
         std::string hash = SHA256::digestString(val).toHex();
-        if (which ==
-            "SOPInstanceUID") // keep a copy as the filename for the output
+        if (which == "SOPInstanceUID") // keep a copy as the filename for the output
           filenamestring = hash.c_str();
 
         if (which == "SeriesInstanceUID")
@@ -479,7 +485,8 @@ void ShowFilenames(const threadparams &params) {
 }
 
 void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
-               const char *patientid, int dateincrement, bool byseries, int numthreads) {
+               const char *patientid, int dateincrement, bool byseries, int numthreads,
+               const char *projectname) {
   // \precondition: nfiles > 0
   assert(nfiles > 0);
   const char *reference = filenames[0]; // take the first image as reference
@@ -515,7 +522,9 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
     params[thread].dateincrement = dateincrement;
     params[thread].byseries  = byseries;
     params[thread].thread    = thread;
-    if (thread == nthreads - 1) {
+    params[thread].projectname = projectname;
+    if (thread == nthreads - 1)
+    {
       // There is slightly more files to process in this thread:
       params[thread].nfiles += nfiles % nthreads;
     }
@@ -558,6 +567,7 @@ enum optionIndex {
   INPUT,
   OUTPUT,
   PATIENTID,
+  PROJECTNAME,
   DATEINCREMENT,
   EXPORTANON,
   BYSERIES,
@@ -577,11 +587,13 @@ const option::Descriptor usage[] = {
      "  --output, -o  \tOutput directory."},
     {PATIENTID, 0, "p", "patientid", Arg::Required,
      "  --patientid, -p  \tPatient ID after anonymization."},
+    {PROJECTNAME, 0, "j", "projectname", Arg::Required,
+     "  --projectname, -j  \tProject name."},
     {DATEINCREMENT, 0, "d", "dateincrement", Arg::Required,
      "  --dateincrement, -d  \tNumber of days that should be added to dates."},
     {EXPORTANON, 0, "a", "exportanon", Arg::Required,
      "  --exportanon, -a  \tWrites the anonymization structure as a json file "
-     "to disk and quits the program."},
+     "to disk and quits the program. There is no way to import a new file currently."},
     {BYSERIES, 0, "b", "byseries", Arg::None,
      "  --byseries, -b  \tWrites each DICOM file into a separate directory "
      "by image series."},
@@ -622,8 +634,8 @@ int main(int argc, char *argv[]) {
   std::string exportanonfilename = ""; // anon.json
   bool byseries = false;
   int numthreads = 4;
-  for (int i = 0; i < parse.optionsCount(); ++i)
-  {
+  std::string projectname = "";
+  for (int i = 0; i < parse.optionsCount(); ++i) {
     option::Option &opt = buffer[i];
     // fprintf(stdout, "Argument #%d is ", i);
     switch (opt.index()) {
@@ -653,6 +665,15 @@ int main(int argc, char *argv[]) {
         patientID = opt.arg;
       } else {
         fprintf(stdout, "--patientid needs a string specified\n");
+        exit(-1);
+      }
+      break;
+    case PROJECTNAME:
+      if (opt.arg) {
+        fprintf(stdout, "--projectname '%s'\n", opt.arg);
+        projectname = opt.arg;
+      } else {
+        fprintf(stdout, "--projectname needs a string specified\n");
         exit(-1);
       }
       break;
@@ -717,7 +738,7 @@ int main(int argc, char *argv[]) {
       filenames[i] = l[i].c_str();
     }
     ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(),
-              dateincrement, byseries, numthreads);
+              dateincrement, byseries, numthreads, projectname.c_str());
     delete[] filenames;
   } /* else {
 // Simply copy all filenames into the vector:
