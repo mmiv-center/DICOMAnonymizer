@@ -466,6 +466,8 @@ void *ReadFilesThread(void *voidparams) {
     gdcm::Writer writer;
     writer.SetFile(fileToAnon);
 
+    gdcm::Trace::SetDebug( true );
+    gdcm::Trace::SetWarning( true );
     writer.SetFileName(outfilename.c_str());
     try {
       if (!writer.Write()) {
