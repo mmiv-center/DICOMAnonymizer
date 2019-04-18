@@ -2,6 +2,8 @@
 
 This source code demonstrates how to anonymize DICOM files based on the DICOM PS 3.15 AnnexE. We provide a Dockerfile that can be used to build the executable and to run anonymizations. Entries such as uid entries are replaced with hash values. This ensures that partial runs of a studies DICOM files can be merged afterwards. This project is written in C++ using the gdcm library and multiple threads to accelerate processing.
 
+For a more flexible anonymizer please see the CTP DICOM Anonymizer project.
+
 ## Build
 The executable can be compiled or created inside a docker container. Here the instructions on how to build and run the docker container. Look at the Dockerfile to see how the build is done locally.
 
