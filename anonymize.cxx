@@ -330,14 +330,17 @@ void *ReadFilesThread(void *voidparams) {
     try {
       if (!reader.Read()) {
         std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
-	// lets try again
-	std::this_thread::sleep_for(std::chrono::milliseconds(200));
-	if (!reader.Read()) {
-	  std::cerr << "Failed second time to read: \"" << filename << "\" in thread " << params->thread << std::endl;
-	  continue;
-	}	
+        // lets try again
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (!reader.Read())
+        {
+          std::cerr << "Failed second time to read: \"" << filename << "\" in thread " << params->thread << std::endl;
+          continue;
+        }
       }
-    } catch (...) {
+    }
+    catch (...)
+    {
       std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
       continue;
     }
@@ -456,7 +459,7 @@ void *ReadFilesThread(void *voidparams) {
   		fn = params->outputdir + "/" + seriesdirname + "/" + filenamestring + ".dcm";
 		}
 
-		fprintf(stdout, "write to file: %s\n", fn.c_str());
+		fprintf(stdout, "[%d] write to file: %s\n", params->thread, fn.c_str());
     std::string outfilename(fn);
 
     // save the file again to the output
@@ -466,9 +469,13 @@ void *ReadFilesThread(void *voidparams) {
     writer.SetFileName(outfilename.c_str());
     try {
       if (!writer.Write()) {
-	fprintf(stderr, "Error [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
+        fprintf(stderr, "Error [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (!writer.Write()) {
+          fprintf(stderr, "Error second time [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
+        }
       }
-    } catch (const std::exception& ex) {
+    } catch (const std::exception &ex) {
       std::cout << "Caught exception \"" << ex.what() << "\"\n";
     }
   }
