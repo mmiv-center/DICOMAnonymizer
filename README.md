@@ -1,9 +1,9 @@
-# DICOM Anonymizer using gdcm
+# A fast DICOM anonymizer
 
-This source code demonstrates how to anonymize DICOM files based on the DICOM PS 3.15 AnnexE. We provide a Dockerfile that can be used to build the executable and to run anonymizations.
+This source code demonstrates how to anonymize DICOM files based on the DICOM PS 3.15 AnnexE. We provide a Dockerfile that can be used to build the executable and to run anonymizations. Entries such as uid entries are replaced with hash values. This ensures that partial runs of a studies DICOM files can be merged afterwards. This project is written in C++ using the gdcm library and multiple threads to accelerate processing.
 
-
-## Build the container
+## Build
+The executable can be compiled or created inside a docker container. Here the instructions on how to build and run the docker container. Look at the Dockerfile to see how the build is done locally.
 
 Clone this repository and:
 ```
@@ -32,11 +32,12 @@ Examples:
   anonymize --help
 ```
 
-## Run the container on a directory
+## Run
 
-If the data is stored in the current directory 'data' this call would anonymize all images in the data directory
-using the PatientName/PatientID UUUUUU and the project name MMIV. Dates would be incremented by 42 days and the
-output would contain different directories for each image series.
+If the data is stored in a directory 'data' underneath the current directory this call would anonymize all
+images in the data directory (and all sub-directories) using the PatientName/PatientID UUUUUU and the project
+name MMIV. Dates would be incremented by 42 days and the output would contain different directories for each
+image series.
 ```
 docker run --rm -it -v `pwd`/data:/input -v /tmp/:/output anonymizer \
            --input /input --output /output --patientid UUUUUU \
