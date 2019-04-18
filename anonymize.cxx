@@ -330,13 +330,6 @@ void *ReadFilesThread(void *voidparams) {
     try {
       if (!reader.Read()) {
         std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
-        // lets try again
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        if (!reader.Read())
-        {
-          std::cerr << "Failed second time to read: \"" << filename << "\" in thread " << params->thread << std::endl;
-          continue;
-        }
       }
     }
     catch (...)
@@ -452,12 +445,14 @@ void *ReadFilesThread(void *voidparams) {
 		if (params->byseries) {
 			// use the series instance uid as a directory name
 			std::string dn = params->outputdir + "/" + seriesdirname;
-			DIR *dir = opendir(dn.c_str());
-			if ( ENOENT == errno)	{
+      struct stat buffer; 
+      if (! (stat (dn.c_str(), &buffer) == 0) ) {
+			//DIR *dir = opendir(dn.c_str());
+			//if ( ENOENT == errno)	{
 				mkdir(dn.c_str(), 0700);
-			} else {
-        closedir(dir);
-      }
+			} //else {
+        //closedir(dir);
+      //}
       fn = params->outputdir + "/" + seriesdirname + "/" + filenamestring + ".dcm";
 		}
 
@@ -468,18 +463,12 @@ void *ReadFilesThread(void *voidparams) {
     gdcm::Writer writer;
     writer.SetFile(fileToAnon);
 
-    gdcm::Trace::SetDebug( true );
-    gdcm::Trace::SetWarning( true );
+    //gdcm::Trace::SetDebug( true );
+    //gdcm::Trace::SetWarning( true );
     writer.SetFileName(outfilename.c_str());
     try {
       if (!writer.Write()) {
         fprintf(stderr, "Error [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
-        fprintf(stderr, "ERROR: %s\n", gdcm::System::GetLastSystemError());
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        if (!writer.Write()) {
-          fprintf(stderr, "Error second time [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
-          fprintf(stderr, "ERROR (second time): %s\n", gdcm::System::GetLastSystemError());
-        }
       }
     } catch (const std::exception &ex) {
       std::cout << "Caught exception \"" << ex.what() << "\"\n";
@@ -746,29 +735,12 @@ int main(int argc, char *argv[]) {
     d.Load(argv[1]);
     gdcm::Directory::FilenamesType l = d.GetFilenames();
     const size_t nfiles = l.size();
-    unsigned int chunkSize = 30000; // that many images in one go
-    int currentChunk = 0;
-    const char **filenames = new const char *[chunkSize];
-    int filesInChunk = 0;
-    unsigned int idx = 0;
+    const char **filenames = new const char *[nfiles];
     for (unsigned int i = 0; i < nfiles; ++i) {
-      if (i >= (currentChunk * chunkSize)) { // change to the next chunk
-        if (filesInChunk > 0) {
-          fprintf(stdout, "Send for ReadFiles %d files.\n", filesInChunk);
-          ReadFiles(filesInChunk, filenames, output.c_str(), patientID.c_str(),
-                    dateincrement, byseries, numthreads, projectname.c_str());
-        }
-        currentChunk++;
-        filesInChunk = 0; // reset
-      }
-      idx = i - ((currentChunk-1) * chunkSize);
-      filesInChunk++;
-      fprintf(stdout, "in loop: %d, chunk: %d, total: %ld\n", i, currentChunk, nfiles);
-      filenames[idx] = l[i].c_str();
+      filenames[i] = l[i].c_str();
     }
     // do all the left-over once
-    fprintf(stdout, "Send left overs to ReadFiles %d files.\n", filesInChunk);
-    ReadFiles(filesInChunk, filenames, output.c_str(), patientID.c_str(),
+    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(),
               dateincrement, byseries, numthreads, projectname.c_str());
     delete[] filenames;
   } /* else {
