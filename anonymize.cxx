@@ -740,11 +740,30 @@ int main(int argc, char *argv[]) {
     d.Load(argv[1]);
     gdcm::Directory::FilenamesType l = d.GetFilenames();
     const size_t nfiles = l.size();
-    const char **filenames = new const char *[nfiles];
-    for (unsigned int i = 0; i < nfiles; ++i) {
-      filenames[i] = l[i].c_str();
+    unsigned int chunkSize = 30000; // that many images in one go
+    int currentChunk = 0;
+    const char **filenames = new const char *[chunkSize];
+    int filesInChunk = 0;
+    unsigned int idx = 0;
+    for (unsigned int i = 0; i < nfiles; ++i)
+    {
+      if (i >= (currentChunk * chunkSize)) { // change to the next chunk
+        if (filesInChunk > 0) {
+          fprintf(stdout, "Send for ReadFiles %d files.\n", filesInChunk);
+          ReadFiles(filesInChunk, filenames, output.c_str(), patientID.c_str(),
+                    dateincrement, byseries, numthreads, projectname.c_str());
+        }
+        currentChunk++;
+        filesInChunk = 0; // reset
+      }
+      idx = i - ((currentChunk-1) * chunkSize);
+      filesInChunk++;
+      fprintf(stdout, "in loop: %d, chunk: %d, total: %ld\n", i, currentChunk, nfiles);
+      filenames[idx] = l[i].c_str();
     }
-    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(),
+    // do all the left-over once
+    fprintf(stdout, "Send left overs to ReadFiles %d files.\n", filesInChunk);
+    ReadFiles(filesInChunk, filenames, output.c_str(), patientID.c_str(),
               dateincrement, byseries, numthreads, projectname.c_str());
     delete[] filenames;
   } /* else {
