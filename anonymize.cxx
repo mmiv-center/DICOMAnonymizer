@@ -449,10 +449,14 @@ void *ReadFilesThread(void *voidparams) {
           anon.Replace(gdcm::Tag(a, b), "MODIFIED");
           continue;
       }
+      if (what == "PROJECTNAME") {
+          anon.Replace(gdcm::Tag(a, b), params->projectname.c_str());
+          continue;
+      }
+      
       // fallback, if everything fails we just use the which and set that's field value
     }
-    anon.Replace(gdcm::Tag(0x0010, 0x0010),
-                 params->patientid.c_str()); // this is re-mapped
+    anon.Replace(gdcm::Tag(0x0010, 0x0010), params->patientid.c_str());
     anon.Replace(gdcm::Tag(0x0010, 0x0020), params->patientid.c_str());
     anon.Replace(gdcm::Tag(0x0013, 0x1010), params->projectname.c_str());
     anon.Replace(gdcm::Tag(0x0013, 0x1013), params->sitename.c_str());
