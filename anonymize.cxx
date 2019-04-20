@@ -40,11 +40,13 @@ struct threadparams {
   std::string outputdir;
   std::string patientid;
   std::string projectname;
+  std::string sitename;
   int dateincrement;
   bool byseries;
   int thread; // number of the thread
 };
 
+// https://wiki.cancerimagingarchive.net/display/Public/De-identification+Knowledge+Base
 nlohmann::json work = nlohmann::json::array({
     {"0008", "0050", "AccessionNumber", "hash"},
     {"0018", "4000", "AcquisitionComments", "keep"},
@@ -380,29 +382,39 @@ void *ReadFilesThread(void *voidparams) {
       // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
       if (which == "BlockOwner" && what != "replace") {
         anon.Replace(gdcm::Tag(a, b), what.c_str());
+        continue;
       }
       if (which == "ProjectName") {
         anon.Replace(gdcm::Tag(a, b), params->projectname.c_str());
+        continue;
       }
-      if (what == "replace")
+      if (what == "replace") {
         anon.Replace(gdcm::Tag(a, b), which.c_str());
-      if (what == "remove")
+        continue;
+      }
+      if (what == "remove") {
         anon.Remove(gdcm::Tag(a, b));
-      if (what == "empty")
-        anon.Replace(gdcm::Tag(a, b), "");
-      if (what == "hashuid") {
-        std::string val = sf.ToString(gdcm::Tag(a, b));
-        std::string hash = SHA256::digestString(val).toHex();
-        if (which == "SOPInstanceUID") // keep a copy as the filename for the output
-          filenamestring = hash.c_str();
+        continue;
+      }
+      if (what == "empty") {
+        anon.Empty(gdcm::Tag(a, b));
+        continue;
+      }
+      if (what == "hashuid")  {
+          std::string val = sf.ToString(gdcm::Tag(a, b));
+          std::string hash = SHA256::digestString(val).toHex();
+          if (which == "SOPInstanceUID") // keep a copy as the filename for the output
+            filenamestring = hash.c_str();
 
-        if (which == "SeriesInstanceUID")
-          seriesdirname = hash.c_str();
+          if (which == "SeriesInstanceUID")
+            seriesdirname = hash.c_str();
 
-        anon.Replace(gdcm::Tag(a, b), hash.c_str());
+          anon.Replace(gdcm::Tag(a, b), hash.c_str());
+          continue;
       }
       if (what == "keep") {
         // so we do nothing...
+        continue;
       }
       if (what == "incrementdate") {
         int nd = params->dateincrement;
@@ -427,11 +439,24 @@ void *ReadFilesThread(void *voidparams) {
           // which.c_str(), filename);
           anon.Replace(gdcm::Tag(a, b), "");
         }
+        continue;
       }
+      if (what == "YES") {
+          anon.Replace(gdcm::Tag(a, b), "YES");
+          continue;
+      }
+      if (what == "MODIFIED") {
+          anon.Replace(gdcm::Tag(a, b), "MODIFIED");
+          continue;
+      }
+      // fallback, if everything fails we just use the which and set that's field value
     }
     anon.Replace(gdcm::Tag(0x0010, 0x0010),
                  params->patientid.c_str()); // this is re-mapped
     anon.Replace(gdcm::Tag(0x0010, 0x0020), params->patientid.c_str());
+    anon.Replace(gdcm::Tag(0x0013, 0x1010), params->projectname.c_str());
+    anon.Replace(gdcm::Tag(0x0013, 0x1013), params->sitename.c_str());
+    anon.Replace(gdcm::Tag(0x0013, 0x1012), params->sitename.c_str());
 
     // ok save the file again
     std::string imageInstanceUID = filenamestring;
@@ -488,7 +513,7 @@ void ShowFilenames(const threadparams &params) {
 
 void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
                const char *patientid, int dateincrement, bool byseries, int numthreads,
-               const char *projectname) {
+               const char *projectname, const char *sitename) {
   // \precondition: nfiles > 0
   assert(nfiles > 0);
 /*  const char *reference = filenames[0]; // take the first image as reference
@@ -525,6 +550,7 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
     params[thread].byseries  = byseries;
     params[thread].thread    = thread;
     params[thread].projectname = projectname;
+    params[thread].sitename  = sitename;
     if (thread == nthreads - 1)
     {
       // There is slightly more files to process in this thread:
@@ -570,6 +596,7 @@ enum optionIndex {
   OUTPUT,
   PATIENTID,
   PROJECTNAME,
+  SITENAME,
   DATEINCREMENT,
   EXPORTANON,
   BYSERIES,
@@ -591,6 +618,8 @@ const option::Descriptor usage[] = {
      "  --patientid, -p  \tPatient ID after anonymization."},
     {PROJECTNAME, 0, "j", "projectname", Arg::Required,
      "  --projectname, -j  \tProject name."},
+    {SITENAME, 0, "s", "sitename", Arg::Required,
+     "  --sitename, -s  \tSite name."},
     {DATEINCREMENT, 0, "d", "dateincrement", Arg::Required,
      "  --dateincrement, -d  \tNumber of days that should be added to dates."},
     {EXPORTANON, 0, "a", "exportanon", Arg::Required,
@@ -632,6 +661,7 @@ int main(int argc, char *argv[]) {
   std::string input;
   std::string output;
   std::string patientID = "";
+  std::string sitename = "";
   int dateincrement = 42;
   std::string exportanonfilename = ""; // anon.json
   bool byseries = false;
@@ -676,6 +706,15 @@ int main(int argc, char *argv[]) {
         projectname = opt.arg;
       } else {
         fprintf(stdout, "--projectname needs a string specified\n");
+        exit(-1);
+      }
+      break;
+    case SITENAME:
+      if (opt.arg) {
+        fprintf(stdout, "--sitename '%s'\n", opt.arg);
+        sitename = opt.arg;
+      } else {
+        fprintf(stdout, "--sitename needs a string specified\n");
         exit(-1);
       }
       break;
@@ -741,7 +780,8 @@ int main(int argc, char *argv[]) {
     }
     // do all the left-over once
     ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(),
-              dateincrement, byseries, numthreads, projectname.c_str());
+              dateincrement, byseries, numthreads, projectname.c_str(),
+              sitename.c_str());
     delete[] filenames;
   } /* else {
 // Simply copy all filenames into the vector:
