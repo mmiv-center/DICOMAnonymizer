@@ -4,18 +4,22 @@
 
   Copyright (c) 2019 Hauke Bartsch
 
+  For debugging use:
+    cmake -DCMAKE_BUILD_TYPE=Release ..
+  to build gdcm.
+
   =========================================================================*/
 #include "SHA-256.hpp"
 #include "dateprocessing.h"
 #include "gdcmAnonymizer.h"
 #include "gdcmDefs.h"
 #include "gdcmDirectory.h"
-#include "gdcmFileAnonymizer.h"
 #include "gdcmImageReader.h"
 #include "gdcmReader.h"
 #include "gdcmStringFilter.h"
 #include "gdcmSystem.h"
 #include "gdcmWriter.h"
+#include "gdcmGlobal.h"
 #include "json.hpp"
 #include "optionparser.h"
 #include <gdcmUIDGenerator.h>
@@ -95,8 +99,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0012", "0063",
      "DeIdentificationMethod {Per DICOM PS 3.15 AnnexE. Details in 0012,0064}"},
     {"0012", "0064",
-     "DeIdentificationMethodCodeSequence "
-     "113100/113101/113105/113107/113108/113109/113111"},
+     "DeIdentificationMethodCodeSequence", "113100/113101/113105/113107/113108/113109/113111"},
     {"0008", "2111", "DerivationDescription", "keep"},
     {"0018", "700a", "DetectorID", "keep"},
     {"0018", "1000", "DeviceSerialNumber", "keep"},
@@ -221,7 +224,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0040", "0012", "PreMedication", "keep"},
     {"0013", "1010", "ProjectName", "always"},
     {"0018", "1030", "ProtocolName", "keep"},
-    {"0054", "0016", "Radiopharmaceutical Information Sequence process"},
+    {"0054", "0016", "Radiopharmaceutical Information Sequence", "process"},
     {"0018", "1078", "Radiopharmaceutical Start DateTime", "incrementdate"},
     {"0018", "1079", "Radiopharmaceutical Stop DateTime", "incrementdate"},
     {"0040", "2001", "ReasonForImagingServiceRequest", "keep"},
@@ -366,6 +369,11 @@ void *ReadFilesThread(void *voidparams) {
 
     std::string filenamestring = "";
     std::string seriesdirname = ""; // only used if byseries is true
+    //gdcm::Trace::SetDebug( true );
+    //gdcm::Trace::SetWarning( true );
+
+    // lets add the private group entries
+    // gdcm::AddTag(gdcm::Tag(0x65010010), gdcm::VR::LO, "MY NEW DATASET", reader.GetFile().GetDataSet());
 
     // now walk through the list of entries and apply each one
     for (int i = 0; i < work.size(); i++) {
@@ -430,7 +438,7 @@ void *ReadFilesThread(void *voidparams) {
           sprintf(dat, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
           // fprintf(stdout, "found a date : %s, replace with date: %s\n",
           // val.c_str(), dat);
-
+ 
           anon.Replace(gdcm::Tag(a, b), dat);
         } else {
           // could not read the date here, just remove instead
@@ -453,14 +461,49 @@ void *ReadFilesThread(void *voidparams) {
           anon.Replace(gdcm::Tag(a, b), params->projectname.c_str());
           continue;
       }
+      // Some entries have Re-Mapped, that could be a name on the command line or,
+      // by default we should hash the id
       
       // fallback, if everything fails we just use the which and set that's field value
     }
-    anon.Replace(gdcm::Tag(0x0010, 0x0010), params->patientid.c_str());
-    anon.Replace(gdcm::Tag(0x0010, 0x0020), params->patientid.c_str());
-    anon.Replace(gdcm::Tag(0x0013, 0x1010), params->projectname.c_str());
-    anon.Replace(gdcm::Tag(0x0013, 0x1013), params->sitename.c_str());
-    anon.Replace(gdcm::Tag(0x0013, 0x1012), params->sitename.c_str());
+    // hash of the patient id
+    if (params->patientid == "hashuid") {
+      std::string val  = sf.ToString(gdcm::Tag(0x0010, 0x0010));
+      std::string hash = SHA256::digestString(val).toHex();
+      anon.Replace(gdcm::Tag(0x0010, 0x0010), hash.c_str());
+    } else {
+      anon.Replace(gdcm::Tag(0x0010, 0x0010), params->patientid.c_str());
+    }
+    if (params->patientid == "hashuid") {
+      std::string val  = sf.ToString(gdcm::Tag(0x0010, 0x0020));
+      std::string hash = SHA256::digestString(val).toHex();
+      anon.Replace(gdcm::Tag(0x0010, 0x0020), hash.c_str());
+    } else {
+      anon.Replace(gdcm::Tag(0x0010, 0x0020), params->patientid.c_str());
+    }
+    // fprintf(stdout, "project name is: %s\n", params->projectname.c_str());
+    // this is a private tag --- does not work yet - we can only remove
+    anon.Remove(gdcm::Tag(0x0013, 0x1010));
+    /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1010), params->projectname.c_str())) {
+      gdcm::Trace::SetDebug( true );
+      gdcm::Trace::SetWarning( true );
+      bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1010)); // empty the field
+                                                       //      if (!ok)
+                                                       //        fprintf(stderr, "failed setting tags 0013,1010 to empty.\n");
+    }*/
+    anon.Remove(gdcm::Tag(0x0013, 0x1013));
+    /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1013), params->sitename.c_str())) {
+      bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1013));
+//      if (!ok)
+//        fprintf(stderr, "failed setting tags 0013,1013 to empty.\n");
+    }*/
+    anon.Remove(gdcm::Tag(0x0013, 0x1012));
+    /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1012), params->sitename.c_str())) {
+      //fprintf(stderr, "Cannot set private tag 0013, 1012, try to set to 0\n");
+      bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1012)); // could fail if the element does not exist
+//      if (!ok)
+//        fprintf(stderr, "failed setting tags 0013,1012 to empty.\n");
+    } */
 
     // ok save the file again
     std::string imageInstanceUID = filenamestring;
@@ -492,8 +535,6 @@ void *ReadFilesThread(void *voidparams) {
     gdcm::Writer writer;
     writer.SetFile(fileToAnon);
 
-    //gdcm::Trace::SetDebug( true );
-    //gdcm::Trace::SetWarning( true );
     writer.SetFileName(outfilename.c_str());
     try {
       if (!writer.Write()) {
@@ -520,6 +561,29 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
                const char *projectname, const char *sitename) {
   // \precondition: nfiles > 0
   assert(nfiles > 0);
+
+  // lets change the DICOM dictionary and add some private tags - this is still not sufficient to be able to write the private tags
+  gdcm::Global gl;
+  if (gl.GetDicts().GetPrivateDict().FindDictEntry(gdcm::Tag(0x0013, 0x0010))) {
+    gl.GetDicts().GetPrivateDict().RemoveDictEntry(gdcm::Tag(0x0013, 0x0010));
+  }
+  gl.GetDicts().GetPrivateDict().AddDictEntry(gdcm::Tag(0x0013,0x0010), gdcm::DictEntry("Private Creator Group CTP-LIKE", "0x0013, 0x0010", gdcm::VR::LO, gdcm::VM::VM1));
+
+  if (gl.GetDicts().GetPrivateDict().FindDictEntry(gdcm::Tag(0x0013, 0x1010))) {
+    gl.GetDicts().GetPrivateDict().RemoveDictEntry(gdcm::Tag(0x0013, 0x1010));
+  }
+  gl.GetDicts().GetPrivateDict().AddDictEntry(gdcm::Tag(0x0013,0x1010), gdcm::DictEntry("ProjectName", "0x0013, 0x1010", gdcm::VR::LO, gdcm::VM::VM1));
+
+  if (gl.GetDicts().GetPrivateDict().FindDictEntry(gdcm::Tag(0x0013, 0x1013))) {
+    gl.GetDicts().GetPrivateDict().RemoveDictEntry(gdcm::Tag(0x0013, 0x1013));
+  }
+  gl.GetDicts().GetPrivateDict().AddDictEntry(gdcm::Tag(0x0013,0x1013), gdcm::DictEntry("SiteID", "0x0013, 0x1013", gdcm::VR::LO, gdcm::VM::VM1));
+
+  if (gl.GetDicts().GetPrivateDict().FindDictEntry(gdcm::Tag(0x0013, 0x1012))) {
+    gl.GetDicts().GetPrivateDict().RemoveDictEntry(gdcm::Tag(0x0013, 0x1012));
+  }
+  gl.GetDicts().GetPrivateDict().AddDictEntry(gdcm::Tag(0x0013,0x1012), gdcm::DictEntry("SiteName", "0x0013, 0x1012", gdcm::VR::LO, gdcm::VM::VM1));
+
 /*  const char *reference = filenames[0]; // take the first image as reference
 
   gdcm::ImageReader reader;
@@ -592,7 +656,7 @@ struct Arg : public option::Arg {
                                                    : option::ARG_IGNORE;
   }
 };
-
+ 
 enum optionIndex {
   UNKNOWN,
   HELP,
@@ -619,7 +683,7 @@ const option::Descriptor usage[] = {
     {OUTPUT, 0, "o", "output", Arg::Required,
      "  --output, -o  \tOutput directory."},
     {PATIENTID, 0, "p", "patientid", Arg::Required,
-     "  --patientid, -p  \tPatient ID after anonymization."},
+     "  --patientid, -p  \tPatient ID after anonymization or \"hashuid\" to hash the id."},
     {PROJECTNAME, 0, "j", "projectname", Arg::Required,
      "  --projectname, -j  \tProject name."},
     {SITENAME, 0, "s", "sitename", Arg::Required,
@@ -664,8 +728,8 @@ int main(int argc, char *argv[]) {
 
   std::string input;
   std::string output;
-  std::string patientID = "";
-  std::string sitename = "";
+  std::string patientID = "hashuid"; // mark the default value as hash the existing uids for patientID and patientName
+  std::string sitename = "";  
   int dateincrement = 42;
   std::string exportanonfilename = ""; // anon.json
   bool byseries = false;
