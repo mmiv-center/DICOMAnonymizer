@@ -497,6 +497,7 @@ void *ReadFilesThread(void *voidparams) {
 //      if (!ok)
 //        fprintf(stderr, "failed setting tags 0013,1013 to empty.\n");
     }*/
+    anon.Remove(gdcm::Tag(0x0013, 0x1011));
     anon.Remove(gdcm::Tag(0x0013, 0x1012));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1012), params->sitename.c_str())) {
       //fprintf(stderr, "Cannot set private tag 0013, 1012, try to set to 0\n");
