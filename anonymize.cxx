@@ -685,7 +685,7 @@ const option::Descriptor usage[] = {
     {OUTPUT, 0, "o", "output", Arg::Required,
      "  --output, -o  \tOutput directory."},
     {PATIENTID, 0, "p", "patientid", Arg::Required,
-     "  --patientid, -p  \tPatient ID after anonymization or \"hashuid\" to hash the id."},
+     "  --patientid, -p  \tPatient ID after anonymization (default is \"hashuid\" to hash the existing id)."},
     {PROJECTNAME, 0, "j", "projectname", Arg::Required,
      "  --projectname, -j  \tProject name."},
     {SITENAME, 0, "s", "sitename", Arg::Required,

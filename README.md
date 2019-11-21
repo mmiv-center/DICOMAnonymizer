@@ -26,8 +26,8 @@ Options:
                        recommendations of the cancer imaging archive.
   --input, -i          Input directory.
   --output, -o         Output directory.
-  --patientid, -p      Patient ID after anonymization or "hashuid" to hash the
-                       id.
+  --patientid, -p      Patient ID after anonymization (default is "hashuid" to hash the
+                       existing id).
   --projectname, -j    Project name.
   --sitename, -s       Site name.
   --dateincrement, -d  Number of days that should be added to dates.
