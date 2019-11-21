@@ -706,7 +706,8 @@ const option::Descriptor usage[] = {
      "\nExamples:\n"
      "  anonymize --input directory --output directory --patientid bla -d 42 -b\n"
      "  anonymize --exportanon rules.json\n"
-     "  anonymize --tagchange \"0008,0080=PROJECTNAME\" --tagchange \"0008,0081=bla\" --exportanon rules.json\n"
+     "  anonymize --tagchange \"0008,0080=PROJECTNAME\" --tagchange \"0008,0081=bla\" \\"
+     "            --exportanon rules.json\n"
      "  anonymize --help\n"},
     {0, 0, 0, 0, 0, 0}};
 
