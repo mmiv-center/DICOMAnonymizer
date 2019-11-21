@@ -83,3 +83,6 @@ docker run --rm -it anonymizer --exportanon rules.json
 The option --tagchange can be used to change the build-in rules. In the above example the placeholder PROJECTNAME is used to
 store the value of option -j (test) in the tag for InstitutionName (0008,0080). The default rule for this tag specifies that
 the value is deleted. In our PACS we use that tag to indicate the project name.
+
+It is important to apply the arguments to the program in the correct order. First we set the name of the project and change
+rule, then we change export the rules.
