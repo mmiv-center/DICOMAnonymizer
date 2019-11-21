@@ -14,6 +14,7 @@
 #include "gdcmAnonymizer.h"
 #include "gdcmDefs.h"
 #include "gdcmDirectory.h"
+#include "gdcmReader.h"
 #include "gdcmImageReader.h"
 #include "gdcmReader.h"
 #include "gdcmStringFilter.h"
@@ -330,7 +331,8 @@ void *ReadFilesThread(void *voidparams) {
     const char *filename = params->filenames[file];
     // std::cerr << filename << std::endl;
 
-    gdcm::ImageReader reader;
+    //gdcm::ImageReader reader;
+    gdcm::Reader reader;
     reader.SetFileName(filename);
     try {
       if (!reader.Read()) {
@@ -343,7 +345,7 @@ void *ReadFilesThread(void *voidparams) {
       continue;
     }
 
-    const gdcm::Image &image = reader.GetImage();
+    //const gdcm::Image &image = reader.GetImage();
     // if we have the image here we can anonymize now and write again
     gdcm::Anonymizer anon;
     gdcm::File &fileToAnon = reader.GetFile();
