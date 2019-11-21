@@ -57,7 +57,7 @@ long legald(struct sdate d) {   /* return gday, or exit if bad date */
     return g;
     }
   else {
-    fprintf(stderr,"%s: Illegal date %d %d %d.\n",
+    fprintf(stderr,"%s: Illegal date %ld %ld %ld.\n",
             progname, d.y, d.m, d.d);
     exit(2);
     }
