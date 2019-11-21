@@ -26,7 +26,8 @@ Options:
                        recommendations of the cancer imaging archive.
   --input, -i          Input directory.
   --output, -o         Output directory.
-  --patientid, -p      Patient ID after anonymization.
+  --patientid, -p      Patient ID after anonymization or "hashuid" to hash the
+                       id.
   --projectname, -j    Project name.
   --sitename, -s       Site name.
   --dateincrement, -d  Number of days that should be added to dates.
@@ -35,10 +36,15 @@ Options:
                        file currently.
   --byseries, -b       Writes each DICOM file into a separate directory by image
                        series.
+  --tagchange, -P      Changes the default behavior for a tag in the build-in
+                       rules.
   --numthreads, -t     How many threads should be used (default 4).
 
 Examples:
   anonymize --input directory --output directory --patientid bla -d 42 -b
+  anonymize --exportanon rules.json
+  anonymize -j test --tagchange "0008,0080=PROJECTNAME" \
+            --tagchange "0008,0081=bla" --exportanon rules.json
   anonymize --help
 ```
 
@@ -74,4 +80,6 @@ The tags that this program will anonymize are described in a JSON file that can 
 ```
 docker run --rm -it anonymizer --exportanon rules.json
 ```
-
+The option --tagchange can be used to change the build-in rules. In the above example the placeholder PROJECTNAME is used to
+store the value of option -j (test) in the tag for InstitutionName (0008,0080). The default rule for this tag specifies that
+the value is deleted. In our PACS we use that tag to indicate the project name.

@@ -669,7 +669,8 @@ enum optionIndex {
   DATEINCREMENT,
   EXPORTANON,
   BYSERIES,
-  NUMTHREADS
+  NUMTHREADS,
+  TAGCHANGE
 };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
@@ -697,11 +698,15 @@ const option::Descriptor usage[] = {
     {BYSERIES, 0, "b", "byseries", Arg::None,
      "  --byseries, -b  \tWrites each DICOM file into a separate directory "
      "by image series."},
+    {TAGCHANGE, 0, "P", "tagchange", Arg::Required,
+     "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
     {NUMTHREADS, 0, "t", "numthreads", Arg::Required,
      "  --numthreads, -t  \tHow many threads should be used (default 4)." },
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
      "  anonymize --input directory --output directory --patientid bla -d 42 -b\n"
+     "  anonymize --exportanon rules.json\n"
+     "  anonymize --tagchange \"0008,0080=PROJECTNAME\" --tagchange \"0008,0081=bla\" --exportanon rules.json\n"
      "  anonymize --help\n"},
     {0, 0, 0, 0, 0, 0}};
 
@@ -800,6 +805,58 @@ int main(int argc, char *argv[]) {
       fprintf(stdout, "--byseries\n");
       byseries = true;
       break;
+    case TAGCHANGE:
+      if (opt.arg) {
+        fprintf(stdout, "--tagchange %s\n", opt.arg);
+	std::string tagchange = opt.arg;
+	// apply this tag to the rules, should overwrite what was in there, or add another rule
+	std::string tag1;
+	std::string tag2;
+	std::string res;
+	int posEqn = tagchange.find("=");
+	if (posEqn == std::string::npos) {
+	  fprintf(stdout, "--tagchange error, string does not match pattern %%o,%%o=%%s\n");
+	  exit(-1);
+	}
+	res = tagchange.substr(posEqn+1, std::string::npos); // until the end of the string
+	std::string front = tagchange.substr(0,posEqn);
+	int posComma = front.find(",");
+	if (posComma == std::string::npos) {
+	  fprintf(stdout, "--tagchange error, string does not match pattern %%o,%%o=%%s\n");
+	  exit(-1);
+	}
+	tag1 = front.substr(0,posComma);
+	tag2 = front.substr(posComma+1, std::string::npos);
+	fprintf(stdout, "got a tagchange of %s,%s = %s\n", tag1.c_str(), tag2.c_str(), res.c_str());
+	int a = strtol(tag1.c_str(), NULL, 16);
+	int b = strtol(tag2.c_str(), NULL, 16);  // did this work? we should check here and not just add
+	// now check in work if we add or replace this rule
+	bool found = false;
+	for (int i = 0; i < work.size(); i++) {
+	  // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
+	  std::string ttag1(work[i][0]);
+	  std::string ttag2(work[i][1]);
+	  std::string twhich(work[i][2]);
+	  if (tag1 == ttag1 && tag2 == ttag2) {
+	    // found and overwrite
+	    found = true;
+	    work[i][3] = res; // overwrite the value, [2] is name
+	  }
+	}
+	if (!found) {
+	  // append as a new rule
+	  nlohmann::json ar;
+	  ar.push_back( tag1 );
+	  ar.push_back( tag2 );
+	  ar.push_back( res );
+	  ar.push_back( res );
+	  work.push_back( ar );
+	}
+      } else {
+        fprintf(stdout, "--tagchange needs a string specification like this \"0080,0010=ANON\"\n");
+        exit(-1);
+      }
+      break;      
     case NUMTHREADS:
       if (opt.arg) {
         fprintf(stdout, "--numthreads %d\n", atoi(opt.arg));
