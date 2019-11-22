@@ -603,6 +603,9 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
   unsigned short pixelsize = pixeltype.GetPixelSize();
   (void)pixelsize;
   assert(image.GetNumberOfDimensions() == 2); */
+  if (nfiles <= numthreads) {
+    numthreads = 1; // fallback if we don't have enough files to process
+  }
 
   const unsigned int nthreads = numthreads; // how many do we want to use?
   threadparams params[nthreads];
