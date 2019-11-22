@@ -86,3 +86,10 @@ the value is deleted - in our PACS we use that tag to indicate the project name.
 
 It is important to apply the arguments to the program in the correct order. First we set the name of the project and change
 rule, then we export the rules.
+
+### Using data in multiple projects
+
+Our PACS system stores only a single copy per SOPInstanceUID - which makes sense. In order to support data that is project
+specific I change the hashing algorithm (hashuid+PROJECTNAME) to include the projects name (-j option) for tags that relate
+to image, series, study and frame of reference uids. This generates full copies of the data, one for each project. Deleting
+data from one project does not influence the same data used in another project!

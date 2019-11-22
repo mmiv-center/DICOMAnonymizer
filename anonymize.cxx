@@ -117,7 +117,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0070", "031a", "FiducialUID", "hashuid"},
     {"0040", "2017", "FillerOrderNumber", "empty"},
     {"0020", "9158", "FrameComments", "keep"},
-    {"0020", "0052", "FrameOfReferenceUID", "hashuid"},
+    {"0020", "0052", "FrameOfReferenceUID", "hashuid+PROJECTNAME"},
     {"0018", "1008", "GantryID", "keep"},
     {"0018", "1005", "GeneratorID", "keep"},
     {"0070", "0001", "GraphicAnnotationSequence", "remove"},
@@ -231,7 +231,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0040", "2001", "ReasonForImagingServiceRequest", "keep"},
     {"0032", "1030", "ReasonforStudy", "keep"},
     {"0400", "0402", "RefDigitalSignatureSeq", "remove"},
-    {"3006", "0024", "ReferencedFrameOfReferenceUID", "hashuid"},
+    {"3006", "0024", "ReferencedFrameOfReferenceUID", "hashuid+PROJECTNAME"},
     {"0038", "0004", "ReferencedPatientAliasSeq", "remove"},
     {"0008", "0092", "ReferringPhysicianAddress", "remove"},
     {"0008", "0090", "ReferringPhysicianName", "empty"},
@@ -243,10 +243,10 @@ nlohmann::json work = nlohmann::json::array({
     {"0008", "1111", "RefPPSSeq", "remove"},
     {"0008", "1150", "RefSOPClassUID", "keep"},
     {"0400", "0403", "RefSOPInstanceMACSeq", "remove"},
-    {"0008", "1155", "RefSOPInstanceUID", "hashuid"},
+    {"0008", "1155", "RefSOPInstanceUID", "hashuid+PROJECTNAME"},
     {"0008", "1110", "RefStudySeq", "remove"},
     {"0010", "2152", "RegionOfResidence", "remove"},
-    {"3006", "00c2", "RelatedFrameOfReferenceUID", "hashuid"},
+    {"3006", "00c2", "RelatedFrameOfReferenceUID", "hashuid+PROJECTNAME"},
     {"0040", "0275", "RequestAttributesSeq", "remove"},
     {"0032", "1070", "RequestedContrastAgent", "keep"},
     {"0040", "1400", "RequestedProcedureComments", "keep"},
@@ -274,7 +274,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0032", "1000", "ScheduledStudyStartDate", "incrementdate"},
     {"0008", "0021", "SeriesDate", "incrementdate"},
     {"0008", "103e", "SeriesDescription", "keep"},
-    {"0020", "000e", "SeriesInstanceUID", "hashuid"},
+    {"0020", "000e", "SeriesInstanceUID", "hashuid+PROJECTNAME"},
     {"0008", "0031", "SeriesTime", "keep"},
     {"0038", "0062", "ServiceEpisodeDescription", "keep"},
     {"0038", "0060", "ServiceEpisodeID", "remove"},
@@ -282,7 +282,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0013", "1012", "SiteName", "SITENAME"},
     {"0010", "21a0", "SmokingStatus", "keep"},
     {"0018", "1020", "SoftwareVersion", "keep"},
-    {"0008", "0018", "SOPInstanceUID", "hashuid"},
+    {"0008", "0018", "SOPInstanceUID", "hashuid+PROJECTNAME"},
     {"0008", "2112", "SourceImageSeq", "remove"},
     {"0038", "0050", "SpecialNeeds", "keep"},
     {"0040", "0007", "SPSDescription", "keep"},
@@ -301,7 +301,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0008", "1030", "StudyDescription", "keep"},
     {"0020", "0010", "StudyID", "empty"},
     {"0032", "0012", "StudyIDIssuer", "remove"},
-    {"0020", "000d", "StudyInstanceUID", "hashuid"},
+    {"0020", "000d", "StudyInstanceUID", "hashuid+PROJECTNAME"},
     {"0008", "0030", "StudyTime", "keep"},
     {"0020", "0200", "SynchronizationFrameOfReferenceUID", "hashuid"},
     {"0040", "db0d", "TemplateExtensionCreatorUID", "hashuid"},
@@ -409,6 +409,18 @@ void *ReadFilesThread(void *voidparams) {
       if (what == "empty") {
         anon.Empty(gdcm::Tag(a, b));
         continue;
+      }
+      if (what == "hashuid+PROJECTNAME") {
+          std::string val = sf.ToString(gdcm::Tag(a, b));
+          std::string hash = SHA256::digestString(val+params->projectname).toHex();
+          if (which == "SOPInstanceUID") // keep a copy as the filename for the output
+            filenamestring = hash.c_str();
+
+          if (which == "SeriesInstanceUID")
+            seriesdirname = hash.c_str();
+
+          anon.Replace(gdcm::Tag(a, b), hash.c_str());
+          continue;
       }
       if (what == "hashuid")  {
           std::string val = sf.ToString(gdcm::Tag(a, b));
