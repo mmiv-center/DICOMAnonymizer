@@ -89,7 +89,11 @@ rule, then we export the rules.
 
 ### Using data in multiple projects
 
-Our PACS system stores only a single copy per SOPInstanceUID - which makes sense. In order to support data that is project
-specific I change the hashing algorithm (hashuid+PROJECTNAME) to include the projects name (-j option) for tags that relate
+Our PACS system stores only a single copy per SOPInstanceUID/StudyID - which makes sense. In order to support data that is project
+specific I changed the hashing algorithm (hashuid+PROJECTNAME) to include the projects name (-j option) for tags that relate
 to image, series, study and frame of reference uids. This generates full copies of the data, one for each project. Deleting
-data from one project does not influence the same data used in another project!
+data from one project does not influence the same data used in another project.
+
+Information inside sequences (presentation states) are anonymized as well. This should work as long as the sequence tag is
+not listed as "remove". The sequence anonymization function will only check tags at two sequence levels (all tags of a
+sequence inside another sequence are anonymized). This has been verified with text label overlays.
