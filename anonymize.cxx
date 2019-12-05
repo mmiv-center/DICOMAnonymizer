@@ -21,6 +21,7 @@
 #include "gdcmSystem.h"
 #include "gdcmWriter.h"
 #include "gdcmGlobal.h"
+#include "gdcmAttribute.h"
 #include "json.hpp"
 #include "optionparser.h"
 #include <gdcmUIDGenerator.h>
@@ -37,6 +38,7 @@
 #include <stdio.h>
 #include <thread>
 #include <chrono>
+#include <map>
 
 struct threadparams {
   const char **filenames;
@@ -49,6 +51,8 @@ struct threadparams {
   int dateincrement;
   bool byseries;
   int thread; // number of the thread
+  // each thread will store here the study instance uid (original and mapped)
+  std::map<std::string, std::string> byThreadStudyInstanceUID;
 };
 
 // https://wiki.cancerimagingarchive.net/display/Public/De-identification+Knowledge+Base
@@ -120,7 +124,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0020", "0052", "FrameOfReferenceUID", "hashuid+PROJECTNAME"},
     {"0018", "1008", "GantryID", "keep"},
     {"0018", "1005", "GeneratorID", "keep"},
-    {"0070", "0001", "GraphicAnnotationSequence", "remove"},
+      //{"0070", "0001", "GraphicAnnotationSequence", "remove"},
     {"0040", "4037", "HumanPerformersName", "remove"},
     {"0040", "4036", "HumanPerformersOrganization", "remove"},
     {"0088", "0200", "IconImageSequence", "remove"},
@@ -238,13 +242,13 @@ nlohmann::json work = nlohmann::json::array({
     {"0008", "0094", "ReferringPhysicianPhoneNumbers", "remove"},
     {"0008", "0096", "ReferringPhysiciansIDSeq", "remove"},
     {"0040", "4023", "RefGenPurposeSchedProcStepTransUID", "hashuid"},
-    {"0008", "1140", "RefImageSeq", "remove"},
+      //{"0008", "1140", "RefImageSeq", "remove"},
     {"0008", "1120", "RefPatientSeq", "remove"},
     {"0008", "1111", "RefPPSSeq", "remove"},
     {"0008", "1150", "RefSOPClassUID", "keep"},
     {"0400", "0403", "RefSOPInstanceMACSeq", "remove"},
     {"0008", "1155", "RefSOPInstanceUID", "hashuid+PROJECTNAME"},
-    {"0008", "1110", "RefStudySeq", "remove"},
+      //{"0008", "1110", "RefStudySeq", "remove"},
     {"0010", "2152", "RegionOfResidence", "remove"},
     {"3006", "00c2", "RelatedFrameOfReferenceUID", "hashuid+PROJECTNAME"},
     {"0040", "0275", "RequestAttributesSeq", "remove"},
@@ -323,8 +327,176 @@ nlohmann::json work = nlohmann::json::array({
     {"0038", "4000", "VisitComments", "keep"},
 });
 
+// anonymizes only two levels in a sequence
+void anonymizeSequence( threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqur ) {
+  gdcm::DataElement squr = dss->GetDataElement( *tsqur );
+  //gdcm::DataElement squr = *squrP;
+  gdcm::SequenceOfItems *sqi = squr.GetValueAsSQ();
+  if (!sqi || !sqi->GetNumberOfItems() ) {
+    //fprintf(stdout, "this is not a sequence... don't handle as sequence\n"); 
+    return; // do not continue here
+  }
+  // lets do the anonymization twice, once on the lowest level and once on the level above
+  // sequences lowest level
+  for (int itemIdx = 1; itemIdx <= sqi->GetNumberOfItems(); itemIdx++) {
+    // normally we only find a single item here, could be more
+    gdcm::Item &item = sqi->GetItem(itemIdx);
+    gdcm::DataSet &nestedds = item.GetNestedDataSet();
+
+    // we should go through each DataElement of this DataSet
+    gdcm::DataSet::Iterator it = nestedds.Begin();
+    for( ; it != nestedds.End(); ) {
+      const gdcm::DataElement &de = *it;
+      gdcm::Tag tt = de.GetTag();
+
+      // maybe this is a sequence?
+      bool isSequence = false;
+      gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de.GetValueAsSQ();
+      if (seq && seq->GetNumberOfItems()) {
+	isSequence = true;
+      }
+
+      if (!isSequence) {
+	//fprintf(stdout, "in itemIdx %04x,%04x this is not a sequence\n", tt.GetGroup(), tt.GetElement());
+
+	// what type of tag do we have? if its a sequence go through it, if not check if we have to anonymize this tag
+	for (int wi = 0; wi < work.size(); wi++) {
+	  // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
+	  std::string tag1(work[wi][0]);
+	  std::string tag2(work[wi][1]);
+	  std::string which(work[wi][2]);
+	  std::string what("replace");
+	  if (work[wi].size() > 3) {
+	    what = work[wi][3];
+	  }
+	  if (what != "hashuid+PROJECTNAME")
+	    continue; // we can only do this inside a sequence
+	  int a = strtol(tag1.c_str(), NULL, 16);
+	  int b = strtol(tag2.c_str(), NULL, 16);
+	  gdcm::Tag aa(a,b); // now works
+	  if (tt.GetGroup() != a || tt.GetElement() != b) {
+	    continue;
+	  }
+	  //fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
+	  
+	  gdcm::DataElement cm = de;
+	  const gdcm::ByteValue *bv = cm.GetByteValue();
+	  std::string dup( bv->GetPointer(), bv->GetLength() );
+	  std::string hash = SHA256::digestString(dup+params->projectname).toHex();
+	  //fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+	  cm.SetByteValue( hash.c_str(), (uint32_t)hash.size() );
+	  //cm.SetVLToUndefined();
+	  //cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
+	  nestedds.Replace( cm );
+	  //fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x\n", wi, aa.GetGroup(), aa.GetElement());
+	}
+      } else { // we have a sequence, lets go in and change all values
+	// make a copy of the whole thing and set to VL undefined
+	gdcm::DataElement ppp2 = de;
+	ppp2.SetVLToUndefined();
+	gdcm::SmartPointer<gdcm::SequenceOfItems> seq = ppp2.GetValueAsSQ();
+	if (seq && seq->GetNumberOfItems() ) {
+	  for (int i = 1; i <= seq->GetNumberOfItems(); i++ ) {
+	    gdcm::Item &item2 = seq->GetItem(i);
+	    gdcm::DataSet &nestedds2 = item2.GetNestedDataSet();
+
+	    // inside this sequence we could have tags that we need to anonymize, check all and fidn out if one needs our attention
+	    for (int wi = 0; wi < work.size(); wi++) {
+	      // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
+	      std::string tag1(work[wi][0]);
+	      std::string tag2(work[wi][1]);
+	      std::string which(work[wi][2]);
+	      std::string what("replace");
+	      if (work[wi].size() > 3) {
+		what = work[wi][3];
+	      }
+	      if (what != "hashuid+PROJECTNAME")
+		continue; // we can only do this inside a sequence
+	      int a = strtol(tag1.c_str(), NULL, 16);
+	      int b = strtol(tag2.c_str(), NULL, 16);
+	      gdcm::Tag aa(a,b); // now works
+	      	      
+	      // REPLACE
+	      //gdcm::Tag tcm(0x0008,0x1155);
+	      if (nestedds2.FindDataElement(aa)) {
+	        //fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
+		gdcm::DataElement cm = nestedds2.GetDataElement( aa );
+		const gdcm::ByteValue *bv = cm.GetByteValue();
+		std::string dup( bv->GetPointer(), bv->GetLength() );
+		std::string hash = SHA256::digestString(dup+params->projectname).toHex();
+		// fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+		cm.SetByteValue( hash.c_str(), (uint32_t)hash.size() );
+		//cm.SetVLToUndefined();
+		//cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
+		nestedds2.Replace( cm );
+	      }
+	      // END REPLACE
+	    }
+	    
+	  }
+	  nestedds.Replace(ppp2);
+	}      
+      }
+      
+      ++it;
+    }
+    
+    
+    
+    // how to anonymize a tag at this level
+    /*    gdcm::Tag siuid(0x0020,0x000e);
+    if (nestedds.FindDataElement(siuid)) {
+      gdcm::DataElement cm = nestedds.GetDataElement( siuid );
+      const gdcm::ByteValue *bv = cm.GetByteValue();
+      std::string dup( bv->GetPointer(), bv->GetLength() );
+      std::string hash = SHA256::digestString(dup+params->projectname).toHex();
+      //fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+      cm.SetByteValue( hash.c_str(), (uint32_t)hash.size() );
+      //cm.SetVLToUndefined();
+      //cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
+      nestedds.Replace( cm );
+      } */
+
+    // how to anonymize a sequence at this level
+    /*    gdcm::Tag purpose(0x0008,0x1140);
+    if (nestedds.FindDataElement( purpose )) {
+      const gdcm::DataElement &ppp = nestedds.GetDataElement( purpose );
+      // make a copy of the whole thing and set to VL undefined
+      gdcm::DataElement ppp2 = ppp;
+      ppp2.SetVLToUndefined();
+      gdcm::SmartPointer<gdcm::SequenceOfItems> seq = ppp2.GetValueAsSQ();
+      if (seq && seq->GetNumberOfItems() ) {
+	for (int i = 1; i <= seq->GetNumberOfItems(); i++ ) {
+	  gdcm::Item &item2 = seq->GetItem(i);
+	  gdcm::DataSet &nestedds2 = item2.GetNestedDataSet();
+	  
+	  gdcm::Tag tcm(0x0008,0x1155);
+	  if (nestedds2.FindDataElement(tcm)) {
+	    gdcm::DataElement cm = nestedds2.GetDataElement( tcm );
+	    const gdcm::ByteValue *bv = cm.GetByteValue();
+	    std::string dup( bv->GetPointer(), bv->GetLength() );
+	    std::string hash = SHA256::digestString(dup+params->projectname).toHex();
+	    // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+	    cm.SetByteValue( hash.c_str(), (uint32_t)hash.size() );
+	    //cm.SetVLToUndefined();
+	    //cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
+	    nestedds2.Replace( cm );
+	  }
+	}
+	nestedds.Replace(ppp2);
+      }
+      } */
+  }
+  
+  gdcm::DataElement squr_dup = squr;
+  squr_dup.SetValue(*sqi);
+  squr_dup.SetVLToUndefined();
+  dss->Replace(squr_dup);
+  return;
+}
+
 void *ReadFilesThread(void *voidparams) {
-  const threadparams *params = static_cast<const threadparams *>(voidparams);
+  threadparams *params = static_cast<threadparams *>(voidparams);
 
   const size_t nfiles = params->nfiles;
   for (unsigned int file = 0; file < nfiles; ++file) {
@@ -345,6 +517,29 @@ void *ReadFilesThread(void *voidparams) {
       continue;
     }
 
+    // process sequences as well
+    // lets check if we can change the sequence that contains the ReferencedSOPInstanceUID inside the 0008,1115 sequence
+
+    gdcm::DataSet &dss = reader.GetFile().GetDataSet();
+    // look for any sequences and process them
+    gdcm::DataSet::Iterator it = dss.Begin();
+    for ( ; it != dss.End(); ) {
+      const gdcm::DataElement &de = *it;
+      gdcm::Tag tt = de.GetTag();
+      gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de.GetValueAsSQ();
+      if (seq && seq->GetNumberOfItems()) {
+	//fprintf(stdout, "Found sequence in: %04x, %04x\n", tt.GetGroup(), tt.GetElement());
+	anonymizeSequence( params, &dss, &tt);
+      }
+      ++it;
+    }
+    
+    /*    gdcm::Tag tsqur(0x0008,0x1115);
+    if (dss.FindDataElement(tsqur)) { // this work on the highest level (Tag is found in dss), but what if we are already in a sequence?
+      //const gdcm::DataElement squr = dss.GetDataElement( tsqur );
+      anonymizeSequence( params, &dss, &tsqur);
+      } */
+    
     //const gdcm::Image &image = reader.GetImage();
     // if we have the image here we can anonymize now and write again
     gdcm::Anonymizer anon;
@@ -371,13 +566,15 @@ void *ReadFilesThread(void *voidparams) {
 
     std::string filenamestring = "";
     std::string seriesdirname = ""; // only used if byseries is true
-    //gdcm::Trace::SetDebug( true );
-    //gdcm::Trace::SetWarning( true );
-
+    gdcm::Trace::SetDebug( true );
+    gdcm::Trace::SetWarning( true );
+    gdcm::Trace::SetError( true);
+    
     // lets add the private group entries
     // gdcm::AddTag(gdcm::Tag(0x65010010), gdcm::VR::LO, "MY NEW DATASET", reader.GetFile().GetDataSet());
 
-    // now walk through the list of entries and apply each one
+
+    // now walk through the list of entries and apply each one to the current ds
     for (int i = 0; i < work.size(); i++) {
       // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
       std::string tag1(work[i][0]);
@@ -419,7 +616,13 @@ void *ReadFilesThread(void *voidparams) {
           if (which == "SeriesInstanceUID")
             seriesdirname = hash.c_str();
 
+	  if (which == "StudyInstanceUID") {
+	    // we want to keep a mapping of the old and new study instance uids
+	    params->byThreadStudyInstanceUID.insert( std::pair<std::string, std::string>(val, hash) ); // should only add this pair once
+	  }
+	  
           anon.Replace(gdcm::Tag(a, b), hash.c_str());
+	  // this does not replace elements inside sequences
           continue;
       }
       if (what == "hashuid")  {
@@ -480,6 +683,7 @@ void *ReadFilesThread(void *voidparams) {
       
       // fallback, if everything fails we just use the which and set that's field value
     }
+    
     // hash of the patient id
     if (params->patientid == "hashuid") {
       std::string val  = sf.ToString(gdcm::Tag(0x0010, 0x0010));
@@ -495,6 +699,12 @@ void *ReadFilesThread(void *voidparams) {
     } else {
       anon.Replace(gdcm::Tag(0x0010, 0x0020), params->patientid.c_str());
     }
+    
+    // We store the computed StudyInstanceUID in the StudyID tag.
+    // This is used by the default setup of Sectra to identify the study (together with the AccessionNumber field).
+    std::string anonStudyInstanceUID = sf.ToString(gdcm::Tag(0x0020,0x000D));
+    anon.Replace(gdcm::Tag(0x0020,0x0010), anonStudyInstanceUID.c_str());
+    
     // fprintf(stdout, "project name is: %s\n", params->projectname.c_str());
     // this is a private tag --- does not work yet - we can only remove
     anon.Remove(gdcm::Tag(0x0013, 0x1010));
@@ -529,31 +739,30 @@ void *ReadFilesThread(void *voidparams) {
       imageInstanceUID = gen.Generate();
     }
     std::string fn = params->outputdir + "/" + filenamestring + ".dcm";
-		if (params->byseries) {
-			// use the series instance uid as a directory name
-			std::string dn = params->outputdir + "/" + seriesdirname;
+    if (params->byseries) {
+      // use the series instance uid as a directory name
+      std::string dn = params->outputdir + "/" + seriesdirname;
       struct stat buffer; 
       if (! (stat (dn.c_str(), &buffer) == 0) ) {
-			//DIR *dir = opendir(dn.c_str());
-			//if ( ENOENT == errno)	{
-				mkdir(dn.c_str(), 0700);
-			} //else {
+	//DIR *dir = opendir(dn.c_str());
+	//if ( ENOENT == errno)	{
+	mkdir(dn.c_str(), 0700);
+      } //else {
         //closedir(dir);
       //}
       fn = params->outputdir + "/" + seriesdirname + "/" + filenamestring + ".dcm";
-		}
-
-		fprintf(stdout, "[%d] write to file: %s\n", params->thread, fn.c_str());
+    }
+    
+    fprintf(stdout, "[%d] write to file: %s\n", params->thread, fn.c_str());
     std::string outfilename(fn);
-
+    
     // save the file again to the output
     gdcm::Writer writer;
     writer.SetFile(fileToAnon);
-
     writer.SetFileName(outfilename.c_str());
     try {
       if (!writer.Write()) {
-        fprintf(stderr, "Error [%d, %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
+        fprintf(stderr, "Error [#file: %d, thread: %d] writing file \"%s\" to \"%s\".\n", file, params->thread, filename, outfilename.c_str());
       }
     } catch (const std::exception &ex) {
       std::cout << "Caught exception \"" << ex.what() << "\"\n";
@@ -573,7 +782,7 @@ void ShowFilenames(const threadparams &params) {
 
 void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
                const char *patientid, int dateincrement, bool byseries, int numthreads,
-               const char *projectname, const char *sitename) {
+               const char *projectname, const char *sitename, std::string storeMappingAsJSON) {
   // \precondition: nfiles > 0
   assert(nfiles > 0);
 
@@ -662,6 +871,27 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
   for (unsigned int thread = 0; thread < nthreads; thread++) {
     pthread_join(pthread[thread], NULL);
   }
+
+  // we can access the per thread storage of study instance uid mappings now
+  if (storeMappingAsJSON.length() > 0) {
+    std::map<std::string, std::string> uidmappings;
+    for (unsigned int thread = 0; thread < nthreads; thread++) {
+      for (std::map<std::string,std::string>::iterator it = params[thread].byThreadStudyInstanceUID.begin(); it != params[thread].byThreadStudyInstanceUID.end(); ++it) {
+	uidmappings.insert( std::pair<std::string, std::string> (it->first,it->second) );
+      }
+    }
+    nlohmann::json ar;
+    for (std::map<std::string,std::string>::iterator it = uidmappings.begin(); it != uidmappings.end(); ++it) {
+      ar[it->first] = it->second;
+    }
+
+    // if the file exists already, don't store again (maybe its from another thread?)
+    std::ofstream jsonfile(storeMappingAsJSON);
+    jsonfile << ar;
+    jsonfile.flush();
+    jsonfile.close();
+  }
+  
   delete[] pthread;
 }
 
@@ -687,7 +917,8 @@ enum optionIndex {
   EXPORTANON,
   BYSERIES,
   NUMTHREADS,
-  TAGCHANGE
+  TAGCHANGE,
+  STOREMAPPING
 };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
@@ -715,6 +946,8 @@ const option::Descriptor usage[] = {
     {BYSERIES, 0, "b", "byseries", Arg::None,
      "  --byseries, -b  \tWrites each DICOM file into a separate directory "
      "by image series."},
+    {STOREMAPPING, 0, "m", "storemapping", Arg::None,
+     "  --storemapping, -m  \tStore the StudyInstanceUID mapping as a JSON file."},
     {TAGCHANGE, 0, "P", "tagchange", Arg::Required,
      "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
     {NUMTHREADS, 0, "t", "numthreads", Arg::Required,
@@ -759,6 +992,7 @@ int main(int argc, char *argv[]) {
   bool byseries = false;
   int numthreads = 4;
   std::string projectname = "";
+  std::string storeMappingAsJSON = "";
   for (int i = 0; i < parse.optionsCount(); ++i) {
     option::Option &opt = buffer[i];
     // fprintf(stdout, "Argument #%d is ", i);
@@ -822,6 +1056,10 @@ int main(int argc, char *argv[]) {
     case BYSERIES:
       fprintf(stdout, "--byseries\n");
       byseries = true;
+      break;
+    case STOREMAPPING:
+      fprintf(stdout, "--storemapping\n");
+      storeMappingAsJSON = "mapping.json";
       break;
     case TAGCHANGE:
       if (opt.arg) {
@@ -922,10 +1160,14 @@ int main(int argc, char *argv[]) {
     for (unsigned int i = 0; i < nfiles; ++i) {
       filenames[i] = l[i].c_str();
     }
+    if (storeMappingAsJSON.length() > 0) {
+      storeMappingAsJSON = output + std::string("/") + storeMappingAsJSON;
+    }
+    
     // do all the left-over once
     ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(),
               dateincrement, byseries, numthreads, projectname.c_str(),
-              sitename.c_str());
+              sitename.c_str(), storeMappingAsJSON);
     delete[] filenames;
   } /* else {
 // Simply copy all filenames into the vector:
