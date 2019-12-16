@@ -48,6 +48,7 @@ struct threadparams {
   std::string patientid;
   std::string projectname;
   std::string sitename;
+  std::string siteid;
   int dateincrement;
   bool byseries;
   int thread; // number of the thread
@@ -625,7 +626,7 @@ void *ReadFilesThread(void *voidparams) {
 	  // this does not replace elements inside sequences
           continue;
       }
-      if (what == "hashuid")  {
+      if (what == "hashuid" || what == "hash")  {
           std::string val = sf.ToString(gdcm::Tag(a, b));
           std::string hash = SHA256::digestString(val).toHex();
           if (which == "SOPInstanceUID") // keep a copy as the filename for the output
@@ -678,10 +679,15 @@ void *ReadFilesThread(void *voidparams) {
           anon.Replace(gdcm::Tag(a, b), params->projectname.c_str());
           continue;
       }
+      if (what == "SITENAME") {
+          anon.Replace(gdcm::Tag(a, b), params->sitename.c_str());
+          continue;
+      }
       // Some entries have Re-Mapped, that could be a name on the command line or,
       // by default we should hash the id
-      
+      //fprintf(stdout, "Warning: set to what: %s %s which: %s what: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str());
       // fallback, if everything fails we just use the which and set that's field value
+      anon.Replace(gdcm::Tag(a, b), what.c_str());
     }
     
     // hash of the patient id
@@ -782,7 +788,7 @@ void ShowFilenames(const threadparams &params) {
 
 void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
                const char *patientid, int dateincrement, bool byseries, int numthreads,
-               const char *projectname, const char *sitename, std::string storeMappingAsJSON) {
+               const char *projectname, const char *sitename, const char *siteid, std::string storeMappingAsJSON) {
   // \precondition: nfiles > 0
   assert(nfiles > 0);
 
@@ -846,6 +852,7 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
     params[thread].thread    = thread;
     params[thread].projectname = projectname;
     params[thread].sitename  = sitename;
+    params[thread].siteid    = siteid; 
     if (thread == nthreads - 1)
     {
       // There is slightly more files to process in this thread:
@@ -918,7 +925,8 @@ enum optionIndex {
   BYSERIES,
   NUMTHREADS,
   TAGCHANGE,
-  STOREMAPPING
+  STOREMAPPING,
+  SITEID
 };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
@@ -938,6 +946,8 @@ const option::Descriptor usage[] = {
      "  --projectname, -j  \tProject name."},
     {SITENAME, 0, "s", "sitename", Arg::Required,
      "  --sitename, -s  \tSite name."},
+    {SITEID, 0, "d", "siteid", Arg::Required,
+     "  --siteid, -s  \tSite id."},
     {DATEINCREMENT, 0, "d", "dateincrement", Arg::Required,
      "  --dateincrement, -d  \tNumber of days that should be added to dates."},
     {EXPORTANON, 0, "a", "exportanon", Arg::Required,
@@ -987,6 +997,7 @@ int main(int argc, char *argv[]) {
   std::string output;
   std::string patientID = "hashuid"; // mark the default value as hash the existing uids for patientID and patientName
   std::string sitename = "";  
+  std::string siteid = "";  
   int dateincrement = 42;
   std::string exportanonfilename = ""; // anon.json
   bool byseries = false;
@@ -1041,6 +1052,15 @@ int main(int argc, char *argv[]) {
         sitename = opt.arg;
       } else {
         fprintf(stdout, "--sitename needs a string specified\n");
+        exit(-1);
+      }
+      break;
+    case SITEID:
+      if (opt.arg) {
+        fprintf(stdout, "--siteid '%s'\n", opt.arg);
+        siteid = opt.arg;
+      } else {
+        fprintf(stdout, "--siteid needs a string specified\n");
         exit(-1);
       }
       break;
@@ -1167,7 +1187,7 @@ int main(int argc, char *argv[]) {
     // do all the left-over once
     ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(),
               dateincrement, byseries, numthreads, projectname.c_str(),
-              sitename.c_str(), storeMappingAsJSON);
+              sitename.c_str(), siteid.c_str(), storeMappingAsJSON);
     delete[] filenames;
   } /* else {
 // Simply copy all filenames into the vector:
