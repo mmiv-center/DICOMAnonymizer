@@ -16,6 +16,13 @@ For a more flexible anonymizer please see the CTP DICOM Anonymizer project.
  - fast de-identification (multi-threaded, C++)
  - de-identifies data inside sequences instead of deleting them so overlays survive the procedure
 
+### Limitations
+
+This tool has been written to work as an importer for a (vendor neutral) PACS system. In such a setup data de-identified from the same participant is expected to align with previous data for the same participant and study if the same participant ID and name is used. This is achieved by using study instance uids that are hashed. Series that comes later should therefore match at the study level. It is not possible to recover the original patient ID, patient name and study/series/image instance UIDs from the de-identified fields as no tracking information is stored in the DICOM files. But, identical input data will result in the same hashes. This can be seen as an implicit coupling list - a price we have to pay to be able to use the tool in our research PACS during the data capture stage of a project.
+
+The used SHA256 algorithm for hashing per project is very fast to compute. This will allow an attacker to create many random tries for a brute-force attack. At the worst case this would allow the attacker to recover the original study/series/image instance UIDs. PatientID and PatientName tags are set manually and are therefore not exposed to such an attack.
+
+
 ## Build
 The executable can be compiled or created inside a docker container. Here the instructions on how to build and run the docker container. Look at the Dockerfile to see how the build is done locally.
 
