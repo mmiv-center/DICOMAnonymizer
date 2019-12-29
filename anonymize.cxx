@@ -608,7 +608,7 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
   pthread_t *pthread = new pthread_t[nthreads];
 
   // There is nfiles, and nThreads
-  assert(nfiles > nthreads);
+  assert(nfiles >= nthreads);
   const size_t partition = nfiles / nthreads;
   for (unsigned int thread = 0; thread < nthreads; ++thread) {
     params[thread].filenames = filenames + thread * partition;
@@ -840,7 +840,7 @@ int main(int argc, char *argv[]) {
   // Check if user pass in a single directory
   if (gdcm::System::FileIsDirectory(input.c_str())) {
     gdcm::Directory d;
-    d.Load(argv[1]);
+    d.Load(input.c_str());
     gdcm::Directory::FilenamesType l = d.GetFilenames();
     const size_t nfiles = l.size();
     const char **filenames = new const char *[nfiles];
