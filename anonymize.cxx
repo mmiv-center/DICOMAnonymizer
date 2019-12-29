@@ -739,10 +739,11 @@ void *ReadFilesThread(void *voidparams) {
     // ok save the file again
     std::string imageInstanceUID = filenamestring;
     if (imageInstanceUID == "") {
-      fprintf(stderr, "Error: cannot read image instance uid from %s\n",
+      fprintf(stderr, "Warning: cannot read image instance uid from %s, create a new one.\n",
               filename);
       gdcm::UIDGenerator gen;
       imageInstanceUID = gen.Generate();
+      filenamestring = imageInstanceUID;
     }
     std::string fn = params->outputdir + "/" + filenamestring + ".dcm";
     if (params->byseries) {
