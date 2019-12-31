@@ -8,6 +8,8 @@
     cmake -DCMAKE_BUILD_TYPE=Release ..
   to build gdcm.
 
+//  DumpSiemensBase64.cxx - add CSA header information
+
   =========================================================================*/
 #include "SHA-256.hpp"
 #include "dateprocessing.h"
