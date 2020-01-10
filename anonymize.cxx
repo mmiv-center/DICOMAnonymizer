@@ -54,6 +54,7 @@ struct threadparams {
   int thread; // number of the thread
   // each thread will store here the study instance uid (original and mapped)
   std::map<std::string, std::string> byThreadStudyInstanceUID;
+  std::map<std::string, std::string> byThreadSeriesInstanceUID;
 };
 
 // https://wiki.cancerimagingarchive.net/display/Public/De-identification+Knowledge+Base
@@ -614,8 +615,10 @@ void *ReadFilesThread(void *voidparams) {
           if (which == "SOPInstanceUID") // keep a copy as the filename for the output
             filenamestring = hash.c_str();
 
-          if (which == "SeriesInstanceUID")
+          if (which == "SeriesInstanceUID") {
             seriesdirname = hash.c_str();
+	    params->byThreadSeriesInstanceUID.insert( std::pair<std::string, std::string>(val, hash) ); // should only add this pair once	    
+	  }
 
 	  if (which == "StudyInstanceUID") {
 	    // we want to keep a mapping of the old and new study instance uids
@@ -881,18 +884,28 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir,
 
   // we can access the per thread storage of study instance uid mappings now
   if (storeMappingAsJSON.length() > 0) {
-    std::map<std::string, std::string> uidmappings;
+    std::map<std::string, std::string> uidmappings1;
+    std::map<std::string, std::string> uidmappings2;
     for (unsigned int thread = 0; thread < nthreads; thread++) {
       for (std::map<std::string,std::string>::iterator it = params[thread].byThreadStudyInstanceUID.begin(); it != params[thread].byThreadStudyInstanceUID.end(); ++it) {
-	uidmappings.insert( std::pair<std::string, std::string> (it->first,it->second) );
+	uidmappings1.insert( std::pair<std::string, std::string> (it->first,it->second) );
+      }
+    }
+    for (unsigned int thread = 0; thread < nthreads; thread++) {
+      for (std::map<std::string,std::string>::iterator it = params[thread].byThreadSeriesInstanceUID.begin(); it != params[thread].byThreadSeriesInstanceUID.end(); ++it) {
+	uidmappings2.insert( std::pair<std::string, std::string> (it->first,it->second) );
       }
     }
     nlohmann::json ar;
-    for (std::map<std::string,std::string>::iterator it = uidmappings.begin(); it != uidmappings.end(); ++it) {
-      ar[it->first] = it->second;
+    ar["StudyInstanceUID"] = {};
+    ar["SeriesInstanceUID"] = {};
+    for (std::map<std::string,std::string>::iterator it = uidmappings1.begin(); it != uidmappings1.end(); ++it) {
+      ar["StudyInstanceUID"][it->first] = it->second;
+    }
+    for (std::map<std::string,std::string>::iterator it = uidmappings2.begin(); it != uidmappings2.end(); ++it) {
+      ar["SeriesInstanceUID"][it->first] = it->second;
     }
 
-    // if the file exists already, don't store again (maybe its from another thread?)
     std::ofstream jsonfile(storeMappingAsJSON);
     jsonfile << ar;
     jsonfile.flush();
