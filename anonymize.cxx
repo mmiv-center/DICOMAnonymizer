@@ -381,14 +381,16 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
 
           gdcm::DataElement cm = de;
           const gdcm::ByteValue *bv = cm.GetByteValue();
-          std::string dup(bv->GetPointer(), bv->GetLength());
-          std::string hash = SHA256::digestString(dup + params->projectname).toHex();
-          // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
-          cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
-          // cm.SetVLToUndefined();
-          // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
-          nestedds.Replace(cm);
-          // fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x\n", wi, aa.GetGroup(), aa.GetElement());
+	  if (bv != NULL) {
+	    std::string dup(bv->GetPointer(), bv->GetLength());
+	    std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+	    // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+	    cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
+	    // cm.SetVLToUndefined();
+	    // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
+	    nestedds.Replace(cm);
+	    // fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x\n", wi, aa.GetGroup(), aa.GetElement());
+	  }
         }
       } else { // we have a sequence, lets go in and change all values
         // make a copy of the whole thing and set to VL undefined
@@ -422,13 +424,16 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
                 // fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
                 gdcm::DataElement cm = nestedds2.GetDataElement(aa);
                 const gdcm::ByteValue *bv = cm.GetByteValue();
-                std::string dup(bv->GetPointer(), bv->GetLength());
-                std::string hash = SHA256::digestString(dup + params->projectname).toHex();
-                // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
-                cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
-                // cm.SetVLToUndefined();
-                // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
-                nestedds2.Replace(cm);
+		if (bv != NULL) {
+		  std::string dup(bv->GetPointer(), bv->GetLength());
+		  std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+		  // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+		  cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
+		  // cm.SetVLToUndefined();
+		  // cm.SetVR(gdcm::VR::UI);
+		  // valid for ReferencedSOPInstanceUID
+		  nestedds2.Replace(cm);
+		}		   
               }
               // END REPLACE
             }
