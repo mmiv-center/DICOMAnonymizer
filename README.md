@@ -33,31 +33,36 @@ Clone this repository and:
 USAGE: anonymize [options]
 
 Options:
-  --help               Anonymize DICOM images. Read DICOM image series and write
-                       out an anonymized version of the files based on the
-                       recommendations of the cancer imaging archive.
-  --input, -i          Input directory.
-  --output, -o         Output directory.
-  --patientid, -p      Patient ID after anonymization (default is "hashuid" to hash the
-                       existing id).
-  --projectname, -j    Project name.
-  --sitename, -s       Site name.
-  --dateincrement, -d  Number of days that should be added to dates.
-  --exportanon, -a     Writes the anonymization structure as a json file to disk
-                       and quits the program. There is no way to import a new
-                       file currently.
-  --byseries, -b       Writes each DICOM file into a separate directory by image
-                       series.
-  --tagchange, -P      Changes the default behavior for a tag in the build-in
-                       rules.
-  --numthreads, -t     How many threads should be used (default 4).
+--help               Anonymize DICOM images. Read DICOM image series and write
+                     out an anonymized version of the files based on the
+                     recommendations of the cancer imaging archive.
+--input, -i          Input directory.
+--output, -o         Output directory.
+--patientid, -p      Patient ID after anonymization (default is "hashuid" to
+                     hash the existing id).
+--projectname, -j    Project name.
+--sitename, -s       Site name.
+--siteid, -s         Site id.
+--dateincrement, -d  Number of days that should be added to dates.
+--exportanon, -a     Writes the anonymization structure as a json file to disk
+                     and quits the program. There is no way to import a new
+                     file currently.
+--byseries, -b       Writes each DICOM file into a separate directory by image
+                     series.
+--storemapping, -m   Store the StudyInstanceUID mapping as a JSON file.
+--tagchange, -P      Changes the default behavior for a tag in the build-in
+                     rules.
+--regtagchange, -R   Changes the default behavior for a tag in the build-in
+                     rules (understands regular expressions, retains all
+                     capturing groups).
+--numthreads, -t     How many threads should be used (default 4).
 
 Examples:
   anonymize --input directory --output directory --patientid bla -d 42 -b
   anonymize --exportanon rules.json
-  anonymize -j test --tagchange "0008,0080=PROJECTNAME" \
-            --tagchange "0008,0081=bla" --exportanon rules.json
-  anonymize --help
+  anonymize --tagchange "0008,0080=PROJECTNAME" --tagchange "0008,0081=bla" \
+            --exportanon rules.json
+  anonymize --help		
 ```
 
 ## Run
