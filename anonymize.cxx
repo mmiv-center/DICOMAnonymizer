@@ -39,6 +39,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <thread>
+#include <regex>
 
 struct threadparams {
   const char **filenames;
@@ -366,11 +367,15 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
           std::string tag2(work[wi][1]);
           std::string which(work[wi][2]);
           std::string what("replace");
+	  bool regexp = false; // if we find a regular expression, only retain the entries that are capturing groups (separated by a space)
           if (work[wi].size() > 3) {
             what = work[wi][3];
           }
+	  if (work[wi].size() > 4 && work[wi][4] == "regexp") {
+	    regexp = true;
+	  }
           if (what != "hashuid+PROJECTNAME")
-            continue; // we can only do this inside a sequence
+            continue; // we can only do this inside a sequence, would be good if we can do more inside sequences!!!!
           int a = strtol(tag1.c_str(), NULL, 16);
           int b = strtol(tag2.c_str(), NULL, 16);
           gdcm::Tag aa(a, b); // now works
@@ -579,12 +584,35 @@ void *ReadFilesThread(void *voidparams) {
       std::string tag2(work[i][1]);
       std::string which(work[i][2]);
       std::string what("replace");
+      bool regexp = false;
       if (work[i].size() > 3) {
         what = work[i][3];
       }
       int a = strtol(tag1.c_str(), NULL, 16);
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
+      if (work[i].size() > 4 && work[i][4] == "regexp") {
+	  regexp = true;
+	  // as a test print out what we got
+          std::string val = sf.ToString(gdcm::Tag(a, b));
+	  std::string ns("");
+	  try {
+	    std::regex re(what);
+	    std::smatch match;
+	    if (std::regex_search(val, match, re) && match.size() > 1) {
+	      for (int i = 1; i < match.size(); i++) {
+		ns += match.str(i) + std::string(" ");
+	      }
+	    } else {
+	      ns = std::string("FIONA: no match on regular expression");
+	    }
+	  } catch(std::regex_error& e) {
+	    fprintf(stdout, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n",
+		    tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(), ns.c_str());
+	  }
+	  fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(), ns.c_str());
+	  continue;
+      }
       if (which == "BlockOwner" && what != "replace") {
         anon.Replace(gdcm::Tag(a, b), what.c_str());
         continue;
@@ -618,6 +646,10 @@ void *ReadFilesThread(void *voidparams) {
           // we want to keep a mapping of the old and new study instance uids
           params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
         }
+        if (which == "SeriesInstanceUID") {
+          // we want to keep a mapping of the old and new study instance uids
+          params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+        }
 
         anon.Replace(gdcm::Tag(a, b), hash.c_str());
         // this does not replace elements inside sequences
@@ -631,6 +663,11 @@ void *ReadFilesThread(void *voidparams) {
 
         if (which == "SeriesInstanceUID")
           seriesdirname = hash.c_str();
+
+        if (which == "SeriesInstanceUID") {
+          // we want to keep a mapping of the old and new study instance uids
+          params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+        }
 
         anon.Replace(gdcm::Tag(a, b), hash.c_str());
         continue;
@@ -924,7 +961,8 @@ enum optionIndex {
   NUMTHREADS,
   TAGCHANGE,
   STOREMAPPING,
-  SITEID
+  SITEID,
+  REGTAGCHANGE
 };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
@@ -949,6 +987,7 @@ const option::Descriptor usage[] = {
      "by image series."},
     {STOREMAPPING, 0, "m", "storemapping", Arg::None, "  --storemapping, -m  \tStore the StudyInstanceUID mapping as a JSON file."},
     {TAGCHANGE, 0, "P", "tagchange", Arg::Required, "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
+    {REGTAGCHANGE, 0, "R", "regtagchange", Arg::Required, "  --regtagchange, -R  \tChanges the default behavior for a tag in the build-in rules (understands regular expressions, retains all capturing groups)."},
     {NUMTHREADS, 0, "t", "numthreads", Arg::Required, "  --numthreads, -t  \tHow many threads should be used (default 4)."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
@@ -1146,6 +1185,60 @@ int main(int argc, char *argv[]) {
           }
         } else {
           fprintf(stdout, "--tagchange needs a string specification like this \"0080,0010=ANON\"\n");
+          exit(-1);
+        }
+        break;
+      case REGTAGCHANGE:
+        if (opt.arg) {
+          fprintf(stdout, "--regtagchange %s\n", opt.arg);
+          std::string tagchange = opt.arg;
+          // apply this tag to the rules, should overwrite what was in there, or add another rule
+          std::string tag1;
+          std::string tag2;
+          std::string res;
+          int posEqn = tagchange.find("=");
+          if (posEqn == std::string::npos) {
+            fprintf(stdout, "--regtagchange error, string does not match pattern %%o,%%o=%%s\n");
+            exit(-1);
+          }
+          res = tagchange.substr(posEqn + 1, std::string::npos); // until the end of the string
+          std::string front = tagchange.substr(0, posEqn);
+          int posComma = front.find(",");
+          if (posComma == std::string::npos) {
+            fprintf(stdout, "--regtagchange error, string does not match pattern %%o,%%o=%%s\n");
+            exit(-1);
+          }
+          tag1 = front.substr(0, posComma);
+          tag2 = front.substr(posComma + 1, std::string::npos);
+          fprintf(stdout, "got a regtagchange of %s,%s = %s\n", tag1.c_str(), tag2.c_str(), res.c_str());
+          int a = strtol(tag1.c_str(), NULL, 16);
+          int b = strtol(tag2.c_str(), NULL, 16); // did this work? we should check here and not just add
+          // now check in work if we add or replace this rule
+          bool found = false;
+          for (int i = 0; i < work.size(); i++) {
+            // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
+            std::string ttag1(work[i][0]);
+            std::string ttag2(work[i][1]);
+            std::string twhich(work[i][2]);
+            if (tag1 == ttag1 && tag2 == ttag2) {
+              // found and overwrite
+              found = true;
+              work[i][3] = res; // overwrite the value, [2] is name
+	      work[i][4] = "regexp"; // mark this as a regular expression tag change
+            }
+          }
+          if (!found) {
+            // append as a new rule
+            nlohmann::json ar;
+            ar.push_back(tag1);
+            ar.push_back(tag2);
+            ar.push_back(res);
+            ar.push_back(res);
+	    ar.push_back(std::string("regexp"));
+            work.push_back(ar);
+          }
+        } else {
+          fprintf(stdout, "--regtagchange needs a string specification like this \"0080,0010=\\[(.*) [0-9]+\\]\"\n");
           exit(-1);
         }
         break;
