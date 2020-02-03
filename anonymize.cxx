@@ -611,6 +611,7 @@ void *ReadFilesThread(void *voidparams) {
 		    tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(), ns.c_str());
 	  }
 	  fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(), ns.c_str());
+	  anon.Replace(gdcm::Tag(a, b), ns.c_str());
 	  continue;
       }
       if (which == "BlockOwner" && what != "replace") {
