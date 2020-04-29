@@ -345,8 +345,12 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
     gdcm::DataSet &nestedds = item.GetNestedDataSet();
 
     // we should go through each DataElement of this DataSet
-    gdcm::DataSet::Iterator it = nestedds.Begin();
-    while (it != nestedds.End()) {
+    // we want to iterate but also change the values using Replace (does erase + insert)
+    // so we need to iterate over a copy of the list and Replace in the original
+    gdcm::DataSet copy_nestedds = nestedds;
+
+    gdcm::DataSet::Iterator it = copy_nestedds.Begin();
+    while (it != copy_nestedds.End()) {
       const gdcm::DataElement &de = *it;
       gdcm::Tag tt = de.GetTag();
 
@@ -384,7 +388,7 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
           }
           // fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
 
-          gdcm::DataElement cm = de;
+          gdcm::DataElement cm = de; // make a copy here
           const gdcm::ByteValue *bv = cm.GetByteValue();
           if (bv != NULL) {
             std::string dup(bv->GetPointer(), bv->GetLength());
@@ -393,8 +397,8 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
             cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
             // cm.SetVLToUndefined();
             // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
-            nestedds.Replace(cm);
-            // fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x\n", wi, aa.GetGroup(), aa.GetElement());
+            nestedds.Replace(cm); // this does an erase and insert, we want to not invalidate our iterator here!
+            // fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x %s\n", wi, aa.GetGroup(), aa.GetElement(), hash.c_str());
           }
         }
       } else { // we have a sequence, lets go in and change all values
@@ -521,7 +525,7 @@ void *ReadFilesThread(void *voidparams) {
       std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
       continue;
     }
-
+    // fprintf(stdout, "start processing: %s\n", filename);
     // process sequences as well
     // lets check if we can change the sequence that contains the ReferencedSOPInstanceUID inside the 0008,1115 sequence
 
@@ -533,7 +537,7 @@ void *ReadFilesThread(void *voidparams) {
       gdcm::Tag tt = de.GetTag();
       gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de.GetValueAsSQ();
       if (seq && seq->GetNumberOfItems()) {
-        fprintf(stdout, "Found sequence in: %04x, %04x\n", tt.GetGroup(), tt.GetElement());
+        // fprintf(stdout, "Found sequence in: %04x, %04x\n", tt.GetGroup(), tt.GetElement());
         anonymizeSequence(params, &dss, &tt);
       }
       ++it;
@@ -610,7 +614,8 @@ void *ReadFilesThread(void *voidparams) {
           fprintf(stdout, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
                   what.c_str(), val.c_str(), ns.c_str());
         }
-        fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(), ns.c_str());
+        // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
+        // ns.c_str());
         anon.Replace(gdcm::Tag(a, b), ns.c_str());
         continue;
       }
@@ -1166,7 +1171,7 @@ int main(int argc, char *argv[]) {
           }
           tag1 = front.substr(0, posComma);
           tag2 = front.substr(posComma + 1, std::string::npos);
-          fprintf(stdout, "got a tagchange of %s,%s = %s\n", tag1.c_str(), tag2.c_str(), res.c_str());
+          // fprintf(stdout, "got a tagchange of %s,%s = %s\n", tag1.c_str(), tag2.c_str(), res.c_str());
           int a = strtol(tag1.c_str(), NULL, 16);
           int b = strtol(tag2.c_str(), NULL, 16); // did this work? we should check here and not just add
           // now check in work if we add or replace this rule
@@ -1304,6 +1309,12 @@ int main(int argc, char *argv[]) {
     if (storeMappingAsJSON.length() > 0) {
       storeMappingAsJSON = output + std::string("/") + storeMappingAsJSON;
     }
+    if (nfiles == 0) {
+      fprintf(stderr, "No files found.\n");
+      fflush(stderr);
+      exit(-1);
+    }
+
     // ReadFiles(nfiles, filenames, output.c_str(), numthreads, confidence, storeMappingAsJSON);
     ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, numthreads, projectname.c_str(), sitename.c_str(), siteid.c_str(),
               storeMappingAsJSON);
