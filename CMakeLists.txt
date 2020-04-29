@@ -3,8 +3,9 @@ cmake_minimum_required (VERSION 2.8.11)
 project (anonymize)
 
 # set (CMAKE_CXX_STANDARD 11)
-IF(LINUX)
-    set (CMAKE_CXX_STANDARD 11)
+IF("${CMAKE_SYSTEM}" MATCHES "Linux")
+   set (CMAKE_CXX_STANDARD 17)
+   SET(CMAKE_CXX_FLAGS "-std=c++17 -I/usr/local/include -I/usr/include")
 ELSE()
    # find the correct path for isysroot with `xcrun --show-sdk-path`
    SET(CMAKE_CXX_FLAGS "-std=c++11 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
@@ -21,7 +22,7 @@ message(STATUS ZLIB_LIBRARY = ${ZLIB_LIBRARY})
 message(STATUS XLST_LIBRARY = ${XLST_LIBRARY})
 
 add_executable (anonymize anonymize.cxx ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories (anonymize PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/DataDictionary/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-2.8.9/Source/DataStructureAndEncodingDefinition ${LIBXML2_INCLUDE_DIR})
+target_include_directories (anonymize PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.5/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.5/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.5/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.5/Source/DataDictionary/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.5/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.5/Source/DataStructureAndEncodingDefinition ${LIBXML2_INCLUDE_DIR})
 
 SET(GDCM_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin/)
 link_directories(anonymize ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin/)
