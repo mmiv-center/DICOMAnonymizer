@@ -354,11 +354,14 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
       const gdcm::DataElement &de = *it;
       gdcm::Tag tt = de.GetTag();
 
-      // maybe this is a sequence?
       bool isSequence = false;
-      gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de.GetValueAsSQ();
-      if (seq && seq->GetNumberOfItems()) {
-        isSequence = true;
+      if (nestedds.FindDataElement(tt)) {
+        const gdcm::DataElement &de_orig = nestedds.GetDataElement(tt);
+        gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de_orig.GetValueAsSQ();
+        // maybe this is a sequence?
+        if (seq && seq->GetNumberOfItems()) {
+          isSequence = true;
+        }
       }
 
       if (!isSequence) {
@@ -388,7 +391,7 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
           }
           // fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
 
-          gdcm::DataElement cm = de; // make a copy here
+          gdcm::DataElement cm = nestedds.GetDataElement(tt); // make a copy here of de
           const gdcm::ByteValue *bv = cm.GetByteValue();
           if (bv != NULL) {
             std::string dup(bv->GetPointer(), bv->GetLength());
