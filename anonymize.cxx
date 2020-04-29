@@ -37,9 +37,9 @@
 #include <chrono>
 #include <map>
 #include <pthread.h>
+#include <regex>
 #include <stdio.h>
 #include <thread>
-#include <regex>
 
 struct threadparams {
   const char **filenames;
@@ -346,7 +346,7 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
 
     // we should go through each DataElement of this DataSet
     gdcm::DataSet::Iterator it = nestedds.Begin();
-    for (; it != nestedds.End();) {
+    while (it != nestedds.End()) {
       const gdcm::DataElement &de = *it;
       gdcm::Tag tt = de.GetTag();
 
@@ -367,13 +367,13 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
           std::string tag2(work[wi][1]);
           std::string which(work[wi][2]);
           std::string what("replace");
-	  bool regexp = false; // if we find a regular expression, only retain the entries that are capturing groups (separated by a space)
+          bool regexp = false; // if we find a regular expression, only retain the entries that are capturing groups (separated by a space)
           if (work[wi].size() > 3) {
             what = work[wi][3];
           }
-	  if (work[wi].size() > 4 && work[wi][4] == "regexp") {
-	    regexp = true;
-	  }
+          if (work[wi].size() > 4 && work[wi][4] == "regexp") {
+            regexp = true;
+          }
           if (what != "hashuid+PROJECTNAME")
             continue; // we can only do this inside a sequence, would be good if we can do more inside sequences!!!!
           int a = strtol(tag1.c_str(), NULL, 16);
@@ -386,16 +386,16 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
 
           gdcm::DataElement cm = de;
           const gdcm::ByteValue *bv = cm.GetByteValue();
-	  if (bv != NULL) {
-	    std::string dup(bv->GetPointer(), bv->GetLength());
-	    std::string hash = SHA256::digestString(dup + params->projectname).toHex();
-	    // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
-	    cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
-	    // cm.SetVLToUndefined();
-	    // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
-	    nestedds.Replace(cm);
-	    // fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x\n", wi, aa.GetGroup(), aa.GetElement());
-	  }
+          if (bv != NULL) {
+            std::string dup(bv->GetPointer(), bv->GetLength());
+            std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+            // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+            cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
+            // cm.SetVLToUndefined();
+            // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
+            nestedds.Replace(cm);
+            // fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x\n", wi, aa.GetGroup(), aa.GetElement());
+          }
         }
       } else { // we have a sequence, lets go in and change all values
         // make a copy of the whole thing and set to VL undefined
@@ -429,16 +429,16 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
                 // fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
                 gdcm::DataElement cm = nestedds2.GetDataElement(aa);
                 const gdcm::ByteValue *bv = cm.GetByteValue();
-		if (bv != NULL) {
-		  std::string dup(bv->GetPointer(), bv->GetLength());
-		  std::string hash = SHA256::digestString(dup + params->projectname).toHex();
-		  // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
-		  cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
-		  // cm.SetVLToUndefined();
-		  // cm.SetVR(gdcm::VR::UI);
-		  // valid for ReferencedSOPInstanceUID
-		  nestedds2.Replace(cm);
-		}		   
+                if (bv != NULL) {
+                  std::string dup(bv->GetPointer(), bv->GetLength());
+                  std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+                  // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+                  cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
+                  // cm.SetVLToUndefined();
+                  // cm.SetVR(gdcm::VR::UI);
+                  // valid for ReferencedSOPInstanceUID
+                  nestedds2.Replace(cm);
+                }
               }
               // END REPLACE
             }
@@ -446,7 +446,6 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
           nestedds.Replace(ppp2);
         }
       }
-
       ++it;
     }
 
@@ -515,7 +514,8 @@ void *ReadFilesThread(void *voidparams) {
     reader.SetFileName(filename);
     try {
       if (!reader.Read()) {
-        std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
+        std::cerr << "Failed to read as DICOM: \"" << filename << "\" in thread " << params->thread << std::endl;
+        continue; // try the next file
       }
     } catch (...) {
       std::cerr << "Failed to read: \"" << filename << "\" in thread " << params->thread << std::endl;
@@ -528,12 +528,12 @@ void *ReadFilesThread(void *voidparams) {
     gdcm::DataSet &dss = reader.GetFile().GetDataSet();
     // look for any sequences and process them
     gdcm::DataSet::Iterator it = dss.Begin();
-    for (; it != dss.End();) {
+    while (it != dss.End()) {
       const gdcm::DataElement &de = *it;
       gdcm::Tag tt = de.GetTag();
       gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de.GetValueAsSQ();
       if (seq && seq->GetNumberOfItems()) {
-        // fprintf(stdout, "Found sequence in: %04x, %04x\n", tt.GetGroup(), tt.GetElement());
+        fprintf(stdout, "Found sequence in: %04x, %04x\n", tt.GetGroup(), tt.GetElement());
         anonymizeSequence(params, &dss, &tt);
       }
       ++it;
@@ -592,27 +592,27 @@ void *ReadFilesThread(void *voidparams) {
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
       if (work[i].size() > 4 && work[i][4] == "regexp") {
-	  regexp = true;
-	  // as a test print out what we got
-          std::string val = sf.ToString(gdcm::Tag(a, b));
-	  std::string ns("");
-	  try {
-	    std::regex re(what);
-	    std::smatch match;
-	    if (std::regex_search(val, match, re) && match.size() > 1) {
-	      for (int i = 1; i < match.size(); i++) {
-		ns += match.str(i) + std::string(" ");
-	      }
-	    } else {
-	      ns = std::string("FIONA: no match on regular expression");
-	    }
-	  } catch(std::regex_error& e) {
-	    fprintf(stdout, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n",
-		    tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(), ns.c_str());
-	  }
-	  fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(), ns.c_str());
-	  anon.Replace(gdcm::Tag(a, b), ns.c_str());
-	  continue;
+        regexp = true;
+        // as a test print out what we got
+        std::string val = sf.ToString(gdcm::Tag(a, b));
+        std::string ns("");
+        try {
+          std::regex re(what);
+          std::smatch match;
+          if (std::regex_search(val, match, re) && match.size() > 1) {
+            for (int i = 1; i < match.size(); i++) {
+              ns += match.str(i) + std::string(" ");
+            }
+          } else {
+            ns = std::string("FIONA: no match on regular expression");
+          }
+        } catch (std::regex_error &e) {
+          fprintf(stdout, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
+                  what.c_str(), val.c_str(), ns.c_str());
+        }
+        fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(), ns.c_str());
+        anon.Replace(gdcm::Tag(a, b), ns.c_str());
+        continue;
       }
       if (which == "BlockOwner" && what != "replace") {
         anon.Replace(gdcm::Tag(a, b), what.c_str());
@@ -687,7 +687,7 @@ void *ReadFilesThread(void *voidparams) {
           long c = gday(date1) + nd;
           struct sdate date2 = dtf(c);
           char dat[256];
-          sprintf(dat, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
+          snprintf(dat, 256, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
           // fprintf(stdout, "found a date : %s, replace with date: %s\n",
           // val.c_str(), dat);
 
@@ -915,29 +915,35 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
     std::map<std::string, std::string> uidmappings1;
     std::map<std::string, std::string> uidmappings2;
     for (unsigned int thread = 0; thread < nthreads; thread++) {
-      for (std::map<std::string,std::string>::iterator it = params[thread].byThreadStudyInstanceUID.begin(); it != params[thread].byThreadStudyInstanceUID.end(); ++it) {
-	uidmappings1.insert( std::pair<std::string, std::string> (it->first,it->second) );
+      for (std::map<std::string, std::string>::iterator it = params[thread].byThreadStudyInstanceUID.begin();
+           it != params[thread].byThreadStudyInstanceUID.end(); ++it) {
+        uidmappings1.insert(std::pair<std::string, std::string>(it->first, it->second));
       }
     }
     for (unsigned int thread = 0; thread < nthreads; thread++) {
-      for (std::map<std::string,std::string>::iterator it = params[thread].byThreadSeriesInstanceUID.begin(); it != params[thread].byThreadSeriesInstanceUID.end(); ++it) {
-	uidmappings2.insert( std::pair<std::string, std::string> (it->first,it->second) );
+      for (std::map<std::string, std::string>::iterator it = params[thread].byThreadSeriesInstanceUID.begin();
+           it != params[thread].byThreadSeriesInstanceUID.end(); ++it) {
+        uidmappings2.insert(std::pair<std::string, std::string>(it->first, it->second));
       }
     }
     nlohmann::json ar;
     ar["StudyInstanceUID"] = {};
     ar["SeriesInstanceUID"] = {};
-    for (std::map<std::string,std::string>::iterator it = uidmappings1.begin(); it != uidmappings1.end(); ++it) {
+    for (std::map<std::string, std::string>::iterator it = uidmappings1.begin(); it != uidmappings1.end(); ++it) {
       ar["StudyInstanceUID"][it->first] = it->second;
     }
-    for (std::map<std::string,std::string>::iterator it = uidmappings2.begin(); it != uidmappings2.end(); ++it) {
+    for (std::map<std::string, std::string>::iterator it = uidmappings2.begin(); it != uidmappings2.end(); ++it) {
       ar["SeriesInstanceUID"][it->first] = it->second;
     }
 
     std::ofstream jsonfile(storeMappingAsJSON);
-    jsonfile << ar;
-    jsonfile.flush();
-    jsonfile.close();
+    if (!jsonfile.is_open()) {
+      fprintf(stderr, "Failed to open file \"%s\"", storeMappingAsJSON.c_str());
+    } else {
+      jsonfile << ar;
+      jsonfile.flush();
+      jsonfile.close();
+    }
   }
 
   delete[] pthread;
@@ -988,7 +994,8 @@ const option::Descriptor usage[] = {
      "by image series."},
     {STOREMAPPING, 0, "m", "storemapping", Arg::None, "  --storemapping, -m  \tStore the StudyInstanceUID mapping as a JSON file."},
     {TAGCHANGE, 0, "P", "tagchange", Arg::Required, "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
-    {REGTAGCHANGE, 0, "R", "regtagchange", Arg::Required, "  --regtagchange, -R  \tChanges the default behavior for a tag in the build-in rules (understands regular expressions, retains all capturing groups)."},
+    {REGTAGCHANGE, 0, "R", "regtagchange", Arg::Required,
+     "  --regtagchange, -R  \tChanges the default behavior for a tag in the build-in rules (understands regular expressions, retains all capturing groups)."},
     {NUMTHREADS, 0, "t", "numthreads", Arg::Required, "  --numthreads, -t  \tHow many threads should be used (default 4)."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
@@ -1052,7 +1059,7 @@ int main(int argc, char *argv[]) {
   std::string input;
   std::string output;
   std::string patientID = "hashuid"; // mark the default value as hash the existing uids for patientID and patientName
-  std::string sitename = "";
+  std::string sitename = " ";
   std::string siteid = "";
   int dateincrement = 42;
   std::string exportanonfilename = ""; // anon.json
@@ -1224,8 +1231,8 @@ int main(int argc, char *argv[]) {
             if (tag1 == ttag1 && tag2 == ttag2) {
               // found and overwrite
               found = true;
-              work[i][3] = res; // overwrite the value, [2] is name
-	      work[i][4] = "regexp"; // mark this as a regular expression tag change
+              work[i][3] = res;      // overwrite the value, [2] is name
+              work[i][4] = "regexp"; // mark this as a regular expression tag change
             }
           }
           if (!found) {
@@ -1235,7 +1242,7 @@ int main(int argc, char *argv[]) {
             ar.push_back(tag2);
             ar.push_back(res);
             ar.push_back(res);
-	    ar.push_back(std::string("regexp"));
+            ar.push_back(std::string("regexp"));
             work.push_back(ar);
           }
         } else {
@@ -1264,8 +1271,12 @@ int main(int argc, char *argv[]) {
                     "and exit (\"%s\").\n",
                     exportanonfilename.c_str());
             std::ofstream jsonfile(exportanonfilename);
-            jsonfile << work;
-            jsonfile.flush();
+            if (!jsonfile.is_open()) {
+              fprintf(stderr, "Failed to open file \"%s\"\n", exportanonfilename.c_str());
+            } else {
+              jsonfile << work;
+              jsonfile.flush();
+            }
             exit(0);
           }
         } else {
@@ -1299,6 +1310,13 @@ int main(int argc, char *argv[]) {
     delete[] filenames;
   } else {
     // its a single file, process that
+    // but is it a single file???? Could be a directory that not exists
+    if (!gdcm::System::FileExists(input.c_str())) {
+      fprintf(stderr, "File or directory does not exist (%s).\n", input.c_str());
+      fflush(stderr);
+      exit(-1);
+    }
+
     const char **filenames = new const char *[1];
     filenames[0] = input.c_str();
     // ReadFiles(1, filenames, output.c_str(), 1, confidence, storeMappingAsJSON);

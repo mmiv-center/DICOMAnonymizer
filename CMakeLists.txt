@@ -3,7 +3,12 @@ cmake_minimum_required (VERSION 2.8.11)
 project (anonymize)
 
 # set (CMAKE_CXX_STANDARD 11)
-set (CMAKE_CXX_STANDARD 11)
+IF(LINUX)
+    set (CMAKE_CXX_STANDARD 11)
+ELSE()
+   # find the correct path for isysroot with `xcrun --show-sdk-path`
+   SET(CMAKE_CXX_FLAGS "-std=c++11 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
+ENDIF()
 
 FIND_LIBRARY(LIBXML2_LIBRARY NAMES xml2)
 FIND_LIBRARY(JPEG_LIBRARY NAMES jpeg)
