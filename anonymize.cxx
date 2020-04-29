@@ -530,9 +530,10 @@ void *ReadFilesThread(void *voidparams) {
     // lets check if we can change the sequence that contains the ReferencedSOPInstanceUID inside the 0008,1115 sequence
 
     gdcm::DataSet &dss = reader.GetFile().GetDataSet();
+    gdcm::DataSet copy_dss = dss;
     // look for any sequences and process them
-    gdcm::DataSet::Iterator it = dss.Begin();
-    while (it != dss.End()) {
+    gdcm::DataSet::Iterator it = copy_dss.Begin();
+    while (it != copy_dss.End()) {
       const gdcm::DataElement &de = *it;
       gdcm::Tag tt = de.GetTag();
       gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de.GetValueAsSQ();
@@ -871,6 +872,9 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
     assert(image.GetNumberOfDimensions() == 2); */
   if (nfiles <= numthreads) {
     numthreads = 1; // fallback if we don't have enough files to process
+  }
+  if (numthreads == 0) {
+    numthreads = 1;
   }
 
   const unsigned int nthreads = numthreads; // how many do we want to use?
