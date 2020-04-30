@@ -413,8 +413,9 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
         if (seq && seq->GetNumberOfItems()) {
           for (int i = 1; i <= seq->GetNumberOfItems(); i++) {
             gdcm::Item &item2 = seq->GetItem(i);
-            gdcm::DataSet &nestedds2 = item2.GetNestedDataSet();
-
+            gdcm::DataSet &nestedds2 = item2.GetNestedDataSet(); // only items with value representation SQ might contain nested datasets
+            if (nestedds2.Size() == 0)                           // speed up if there is nothing in there, don't try to anonymize
+              continue;
             // inside this sequence we could have tags that we need to anonymize, check all and fidn out if one needs our attention
             for (int wi = 0; wi < work.size(); wi++) {
               // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
@@ -542,7 +543,7 @@ void *ReadFilesThread(void *voidparams) {
       gdcm::Tag tt = de.GetTag();
       gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de.GetValueAsSQ();
       if (seq && seq->GetNumberOfItems()) {
-        // fprintf(stdout, "Found sequence in: %04x, %04x\n", tt.GetGroup(), tt.GetElement());
+        // fprintf(stdout, "Found sequence in: %04x, %04x for file %s\n", tt.GetGroup(), tt.GetElement(), filename);
         anonymizeSequence(params, &dss, &tt);
       }
       ++it;
