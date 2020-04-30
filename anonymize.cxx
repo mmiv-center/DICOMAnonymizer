@@ -332,14 +332,15 @@ nlohmann::json work = nlohmann::json::array({
 void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqur) {
   gdcm::DataElement squr = dss->GetDataElement(*tsqur);
   // gdcm::DataElement squr = *squrP;
-  gdcm::SequenceOfItems *sqi = squr.GetValueAsSQ();
+  gdcm::SmartPointer<gdcm::SequenceOfItems> sqi = squr.GetValueAsSQ();
   if (!sqi || !sqi->GetNumberOfItems()) {
     // fprintf(stdout, "this is not a sequence... don't handle as sequence\n");
     return; // do not continue here
   }
   // lets do the anonymization twice, once on the lowest level and once on the level above
   // sequences lowest level
-  for (int itemIdx = 1; itemIdx <= sqi->GetNumberOfItems(); itemIdx++) {
+  int itemIdx = 0;
+  for (itemIdx = 1; itemIdx <= sqi->GetNumberOfItems(); itemIdx++) {
     // normally we only find a single item here, could be more
     gdcm::Item &item = sqi->GetItem(itemIdx);
     gdcm::DataSet &nestedds = item.GetNestedDataSet();
@@ -390,19 +391,20 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
             continue;
           }
           // fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
-
-          const gdcm::DataElement &de = nestedds.GetDataElement(tt);
-          gdcm::DataElement cm = de; // make a copy here of de
-          const gdcm::ByteValue *bv = cm.GetByteValue();
-          if (bv != NULL) {
-            std::string dup(bv->GetPointer(), bv->GetLength());
-            std::string hash = SHA256::digestString(dup + params->projectname).toHex();
-            // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
-            cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
-            // cm.SetVLToUndefined();
-            // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
-            nestedds.Replace(cm); // this does an erase and insert, we want to not invalidate our iterator here!
-            // fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x %s\n", wi, aa.GetGroup(), aa.GetElement(), hash.c_str());
+          if (nestedds.FindDataElement(tt)) {
+            const gdcm::DataElement &de = nestedds.GetDataElement(tt);
+            gdcm::DataElement cm = de; // make a copy here of de
+            const gdcm::ByteValue *bv = cm.GetByteValue();
+            if (bv != NULL) {
+              std::string dup(bv->GetPointer(), bv->GetLength());
+              std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+              // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
+              cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
+              // cm.SetVLToUndefined();
+              // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
+              nestedds.Replace(cm); // this does an erase and insert, we want to not invalidate our iterator here!
+              // fprintf(stdout, "REPLACED ONE VALUE at %d -> %04x,%04x %s\n", wi, aa.GetGroup(), aa.GetElement(), hash.c_str());
+            }
           }
         }
       } else { // we have a sequence, lets go in and change all values
@@ -601,6 +603,10 @@ void *ReadFilesThread(void *voidparams) {
       int a = strtol(tag1.c_str(), NULL, 16);
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
+      // if we don't have this dataelement, don't do anything
+      if (!ds.FindDataElement(gdcm::Tag(a, b)))
+        continue;
+
       if (work[i].size() > 4 && work[i][4] == "regexp") {
         regexp = true;
         // as a test print out what we got
