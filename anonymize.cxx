@@ -326,6 +326,10 @@ nlohmann::json work = nlohmann::json::array({
     {"0040", "a073", "VerifyingObserverSequence", "remove"},
     {"0040", "a027", "VerifyingOrganization", "remove"},
     {"0038", "4000", "VisitComments", "keep"},
+    {"0033", "1013", "SomeSiemensMITRA", "remove"},
+    {"0033", "1016", "SomeSiemensMITRA", "remove"},
+    {"0033", "1019", "SomeSiemensMITRA", "remove"},
+    {"0033", "101c", "SomeSiemensMITRA", "remove"},	
 });
 
 // anonymizes only two levels in a sequence
