@@ -2,7 +2,7 @@
 
 This source code demonstrates how to anonymize DICOM files based on the DICOM PS 3.15 AnnexE. I provide a Dockerfile that can be used to build the executable and to run anonymizations. Entries such as uid entries are replaced with hash values. This ensures that partial runs of a studies DICOM files can be merged afterwards. This project is written in C++ using the gdcm library and multiple threads to accelerate processing.
 
-Warning: The operation performed by this tool is a 'soft' de-identification. Instead of a white list of allowed tags the tool
+Warning: The operation performed by this tool is a 'soft' de-identification. Instead of a list of allowed tags the tool
 keeps a list of tags known to frequently contain personal identifying information (PII) and replaces only those. On the command line you
 specify a patient identifier (PatientID/PatientName). Only if you do not keep a mapping of the new and the old identifier this is 
 considered an _anonymization_. If such a list exists the operation performed is a _de-identification_ (permits a later re-identification).
