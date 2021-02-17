@@ -569,11 +569,13 @@ void *ReadFilesThread(void *voidparams) {
 
     gdcm::MediaStorage ms;
     ms.SetFromFile(fileToAnon);
-    if (!gdcm::Defs::GetIODNameFromMediaStorage(ms)) {
+    // this next fails if we are looking at
+    // Breast Tomosynthesis Image Storage   1.2.840.10008.5.1.4.1.1.13.1.3    Breast Tomosynthesis Image IOD
+    /*if (!gdcm::Defs::GetIODNameFromMediaStorage(ms)) {
       std::cerr << "The Media Storage Type of your file is not supported: " << ms << std::endl;
       std::cerr << "Please report" << std::endl;
       continue;
-    }
+      }*/
     gdcm::DataSet &ds = fileToAnon.GetDataSet();
 
     gdcm::StringFilter sf;
