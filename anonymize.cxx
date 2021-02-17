@@ -593,6 +593,11 @@ void *ReadFilesThread(void *voidparams) {
     // lets add the private group entries
     // gdcm::AddTag(gdcm::Tag(0x65010010), gdcm::VR::LO, "MY NEW DATASET", reader.GetFile().GetDataSet());
 
+    // There are some tags that we can assume have to exist. For example the
+    // tags that code for the institution name. We should add it here for all
+    
+
+    
     // now walk through the list of entries and apply each one to the current ds
     for (int i = 0; i < work.size(); i++) {
       // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
@@ -608,8 +613,16 @@ void *ReadFilesThread(void *voidparams) {
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
       // if we don't have this dataelement, don't do anything
-      if (!ds.FindDataElement(gdcm::Tag(a, b)))
-        continue;
+      if (!ds.FindDataElement(gdcm::Tag(a, b))) {
+	// In some cases we need to create the element, like if
+	// we receive that value on the command line.
+	if (work[i].size() > 5 && work[i][5] == "1") {
+	  // we add this entry so it can be written to further down
+	  anon.Empty(gdcm::Tag(a, b));
+	} else {
+	  continue;
+	}
+      }
 
       if (work[i].size() > 4 && work[i][4] == "regexp") {
         regexp = true;
@@ -1204,6 +1217,8 @@ int main(int argc, char *argv[]) {
               // found and overwrite
               found = true;
               work[i][3] = res; // overwrite the value, [2] is name
+	      work[i][4] = std::string("");
+	      work[i][5] = std::string("1");
             }
           }
           if (!found) {
@@ -1213,6 +1228,8 @@ int main(int argc, char *argv[]) {
             ar.push_back(tag2);
             ar.push_back(res);
             ar.push_back(res);
+	    ar.push_back(std::string(""));
+	    ar.push_back(std::string("1"));
             work.push_back(ar);
           }
         } else {
@@ -1257,6 +1274,7 @@ int main(int argc, char *argv[]) {
               found = true;
               work[i][3] = res;      // overwrite the value, [2] is name
               work[i][4] = "regexp"; // mark this as a regular expression tag change
+	      work[i][5] = "1";      // mark as imported from command line - needs to be written even if missing
             }
           }
           if (!found) {
@@ -1267,6 +1285,7 @@ int main(int argc, char *argv[]) {
             ar.push_back(res);
             ar.push_back(res);
             ar.push_back(std::string("regexp"));
+	    ar.push_back(std::string("1"));
             work.push_back(ar);
           }
         } else {
