@@ -541,6 +541,21 @@ void *ReadFilesThread(void *voidparams) {
     // lets check if we can change the sequence that contains the ReferencedSOPInstanceUID inside the 0008,1115 sequence
 
     gdcm::DataSet &dss = reader.GetFile().GetDataSet();
+    // some tags we need to get from the root element, otherwise we will have the case that
+    // we get a StudyInstanceUID inside the 0008,1200 region which is only the referenced UID
+    std::string trueStudyInstanceUID = "";
+    typedef std::set<gdcm::DataElement> DataElementSet;
+    typedef DataElementSet::const_iterator ConstIterator;
+    ConstIterator cit = dss.GetDES().begin();
+    for( ; cit != dss.GetDES().end(); ++cit) {
+      std::stringstream strm;
+      if (cit->GetTag() == gdcm::Tag(0x0020, 0x000d)) {
+	const gdcm::DataElement &de = (*cit);
+	(*cit).GetValue().Print(strm);
+	trueStudyInstanceUID = strm.str();
+      }
+    }
+    
     gdcm::DataSet copy_dss = dss;
     // look for any sequences and process them
     gdcm::DataSet::Iterator it = copy_dss.Begin();
@@ -671,7 +686,7 @@ void *ReadFilesThread(void *voidparams) {
         continue;
       }
       if (what == "hashuid+PROJECTNAME") {
-        std::string val = sf.ToString(gdcm::Tag(a, b));
+        std::string val = sf.ToString(gdcm::Tag(a, b)); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
         std::string hash = SHA256::digestString(val + params->projectname).toHex();
         if (which == "SOPInstanceUID") // keep a copy as the filename for the output
           filenamestring = hash.c_str();
@@ -680,6 +695,11 @@ void *ReadFilesThread(void *voidparams) {
           seriesdirname = hash.c_str();
 
         if (which == "StudyInstanceUID") {
+	  //fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
+	  if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+	    val = trueStudyInstanceUID;
+	    hash = SHA256::digestString(val + params->projectname).toHex();
+	  }
           // we want to keep a mapping of the old and new study instance uids
           params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
         }
@@ -705,6 +725,14 @@ void *ReadFilesThread(void *voidparams) {
           // we want to keep a mapping of the old and new study instance uids
           params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
         }
+
+	if (which == "StudyInstanceUID") {
+	  if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+	    //fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
+	    val = trueStudyInstanceUID;
+	    hash = SHA256::digestString(val).toHex();
+	  }
+	}
 
         anon.Replace(gdcm::Tag(a, b), hash.c_str());
         continue;
@@ -778,9 +806,21 @@ void *ReadFilesThread(void *voidparams) {
 
     // We store the computed StudyInstanceUID in the StudyID tag.
     // This is used by the default setup of Sectra to identify the study (together with the AccessionNumber field).
+
+    //
+    // ISSUE: the tag can be inside of 0008,1200 (StudiesContainingOtherReferencedInstances)
+    //        In this case the reported StudyInstanceUID is not the correct UID but the first
+    //        one found - might be inside 0008,1200. This generates a new StudyInstanceUID
+    //        in the anonymized version of the data.
+    //
     std::string anonStudyInstanceUID = sf.ToString(gdcm::Tag(0x0020, 0x000D));
     anon.Replace(gdcm::Tag(0x0020, 0x0010), anonStudyInstanceUID.c_str());
 
+    //{
+    //  fprintf(stdout, "True studyInstanceUID is: %s\n", trueStudyInstanceUID.c_str());
+    //}
+
+    
     // fprintf(stdout, "project name is: %s\n", params->projectname.c_str());
     // this is a private tag --- does not work yet - we can only remove
     anon.Remove(gdcm::Tag(0x0013, 0x1010));
