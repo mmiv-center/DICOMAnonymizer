@@ -329,7 +329,9 @@ nlohmann::json work = nlohmann::json::array({
     {"0033", "1013", "SomeSiemensMITRA", "remove"},
     {"0033", "1016", "SomeSiemensMITRA", "remove"},
     {"0033", "1019", "SomeSiemensMITRA", "remove"},
-    {"0033", "101c", "SomeSiemensMITRA", "remove"},	
+    {"0033", "101c", "SomeSiemensMITRA", "remove"},
+    {"0009", "1001", "SectraIdentRequestID", "remove"}, // if 0009,0010 is SECTRA_Ident_01
+    {"0009", "1002", "SectraIdentExaminationID", "remove"}, // if 0009,0010 is SECTRA_Ident_01
 });
 
 // anonymizes only two levels in a sequence
