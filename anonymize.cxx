@@ -231,8 +231,8 @@ nlohmann::json work = nlohmann::json::array({
     {"0013", "1010", "ProjectName", "always"},
     {"0018", "1030", "ProtocolName", "keep"},
     {"0054", "0016", "Radiopharmaceutical Information Sequence", "process"},
-    {"0018", "1078", "Radiopharmaceutical Start DateTime", "incrementdate"},
-    {"0018", "1079", "Radiopharmaceutical Stop DateTime", "incrementdate"},
+    {"0018", "1078", "Radiopharmaceutical Start DateTime", "incrementdatetime"},
+    {"0018", "1079", "Radiopharmaceutical Stop DateTime", "incrementdatetime"},
     {"0040", "2001", "ReasonForImagingServiceRequest", "keep"},
     {"0032", "1030", "ReasonforStudy", "keep"},
     {"0400", "0402", "RefDigitalSignatureSeq", "remove"},
@@ -754,6 +754,31 @@ void *ReadFilesThread(void *voidparams) {
           struct sdate date2 = dtf(c);
           char dat[256];
           snprintf(dat, 256, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
+          // fprintf(stdout, "found a date : %s, replace with date: %s\n",
+          // val.c_str(), dat);
+
+          anon.Replace(gdcm::Tag(a, b), dat);
+        } else {
+          // could not read the date here, just remove instead
+          // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
+          // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
+          // which.c_str(), filename);
+          anon.Replace(gdcm::Tag(a, b), "");
+        }
+        continue;
+      }
+      if (what == "incrementdatetime") {
+        int nd = params->dateincrement;
+        std::string val = sf.ToString(gdcm::Tag(a, b));
+        // parse the date string YYYYMMDDHHMMSS
+        struct sdate date1;
+	char t[1024];
+        if (sscanf(val.c_str(), "%04ld%02ld%02ld%s", &date1.y, &date1.m, &date1.d, t) == 4) {
+          // replace with added value
+          long c = gday(date1) + nd;
+          struct sdate date2 = dtf(c);
+          char dat[256];
+          snprintf(dat, 256, "%04ld%02ld%02ld%s", date2.y, date2.m, date2.d, t);
           // fprintf(stdout, "found a date : %s, replace with date: %s\n",
           // val.c_str(), dat);
 
