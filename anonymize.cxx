@@ -1120,19 +1120,26 @@ std::vector<std::string> listFiles(const std::string &path, std::vector<std::str
       // check for '.' and '..', but allow other names that start with a dot
       if (((strlen(f->d_name) == 1) && (f->d_name[0] == '.')) || ((strlen(f->d_name) == 2) && (f->d_name[0] == '.') && (f->d_name[1] == '.')))
         continue;
+      //fprintf(stdout, "entry is: %s file is %d==%d\n", f->d_name, f->d_type, DT_REG);
+      
       if (f->d_type == DT_DIR) {
+	//fprintf(stdout, "enter directory %s\n", (path + "/" + f->d_name + "/").c_str());
         std::vector<std::string> ff = listFiles(path + "/" + f->d_name + "/", files);
         // append the returned files to files
         for (int i = 0; i < ff.size(); i++) {
           // problem is that we add files here several times if we don't check first.. don't understand why
-          if (std::find(files.begin(), files.end(), ff[i]) == files.end())
+          if (std::find(files.begin(), files.end(), ff[i]) == files.end()) {
+	    //fprintf(stdout, "ADD FILE %s", ff[i].c_str());
             files.push_back(ff[i]);
+	  }
         }
       }
 
-      if (f->d_type == DT_REG) {
+      if (f->d_type == DT_REG || f->d_type == DT_LNK) {
+	//fprintf(stdout, "FOUND a normal file (or a symbolic link): %s\n", ( path + "/" + f->d_name).c_str());
         // cb(path + f->d_name);
         if (std::find(files.begin(), files.end(), path + "/" + f->d_name) == files.end())
+          //fprintf(stdout, "ADD FILE %s", (path + "/" + f->d_name).c_str());
           files.push_back(path + "/" + f->d_name);
       }
     }
