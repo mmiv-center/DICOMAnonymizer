@@ -518,6 +518,19 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
   return;
 }
 
+// The TeraRecon workstation rejects images with StudyInstanceUIDs that
+// do not contains some dots and numbers only. We should be closer to the
+// standard if we start with our organizational root.
+//
+// We still do not fulfil the standard (http://dicom.nema.org/dicom/2013/output/chtml/part05/chapter_9.html)
+// because only 0-9 characters are allowed. 
+std::string betterUID(std::string val) {
+  std::string prefix = "1.3.6.1.4.1.45037"; // organizational prefix for us
+  std::string hash = SHA256::digestString(val).toHex();
+  std::string phash = prefix + "." + hash;
+  return phash.substr(0,63); // bummer: this truncates our hash value
+}
+
 void *ReadFilesThread(void *voidparams) {
   threadparams *params = static_cast<threadparams *>(voidparams);
 
@@ -689,7 +702,8 @@ void *ReadFilesThread(void *voidparams) {
       }
       if (what == "hashuid+PROJECTNAME") {
         std::string val = sf.ToString(gdcm::Tag(a, b)); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
-        std::string hash = SHA256::digestString(val + params->projectname).toHex();
+        //std::string hash = SHA256::digestString(val + params->projectname).toHex();
+	std::string hash = betterUID(val + params->projectname);
         if (which == "SOPInstanceUID") // keep a copy as the filename for the output
           filenamestring = hash.c_str();
 
@@ -700,7 +714,8 @@ void *ReadFilesThread(void *voidparams) {
 	  //fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
 	  if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
 	    val = trueStudyInstanceUID;
-	    hash = SHA256::digestString(val + params->projectname).toHex();
+	    //hash = SHA256::digestString(val + params->projectname).toHex();
+	    hash = betterUID(val + params->projectname);
 	  }
           // we want to keep a mapping of the old and new study instance uids
           params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
@@ -778,16 +793,20 @@ void *ReadFilesThread(void *voidparams) {
           long c = gday(date1) + nd;
           struct sdate date2 = dtf(c);
           char dat[256];
+	  // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
           snprintf(dat, 256, "%04ld%02ld%02ld%s", date2.y, date2.m, date2.d, t);
           // fprintf(stdout, "found a date : %s, replace with date: %s\n",
           // val.c_str(), dat);
-
+	  
           anon.Replace(gdcm::Tag(a, b), dat);
         } else {
           // could not read the date here, just remove instead
           // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
           // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
           // which.c_str(), filename);
+
+	  // TODO: We should try harder here. The day and month might be missing components
+	  // and we still have a DT field that is valid (null components).
           anon.Replace(gdcm::Tag(a, b), "");
         }
         continue;
