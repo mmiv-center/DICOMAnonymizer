@@ -1,16 +1,16 @@
 FROM ubuntu:18.04
 
 RUN apt-get update -qq && apt-get install -yq build-essential \
-    cmake git wget libxml2-dev libxslt1-dev libjpeg-dev expat
+    cmake git wget libxml2-dev libxslt1-dev libjpeg-dev xsltproc docbook-xsl-nsexpat
 
 # build gdcm and the executable
-# test with 3.0.5 instead of 2.8.9
+# test with 3.0.20 instead of 3.0.5
 RUN cd /root && git clone https://github.com/mmiv-center/DICOMAnonymizer.git && cd DICOMAnonymizer \
-    && wget https://github.com/malaterre/GDCM/archive/v3.0.5.tar.gz \
-    && tar xzvf v3.0.5.tar.gz \
+    && wget https://github.com/malaterre/GDCM/archive/v3.0.20.tar.gz \
+    && tar xzvf v3.0.20.tar.gz \
     && mkdir gdcm-build \
     && cd gdcm-build \
-    && cmake -DGDCM_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release ../GDCM-3.0.5 \
+    && cmake -DGDCM_BUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release ../GDCM-3.0.20 \
     && make \
     && cd .. \
     && cmake -DCMAKE_BUILD_TYPE=Release . \
