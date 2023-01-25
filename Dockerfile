@@ -1,7 +1,7 @@
-FROM ubuntu:18.04
+FROM ubuntu:22.04
 
 RUN apt-get update -qq && apt-get install -yq build-essential \
-    cmake git wget libxml2-dev libxslt1-dev libjpeg-dev xsltproc docbook-xsl-nsexpat
+    cmake git wget libjpeg-dev linuxdoc-tools libxml2-dev zlib1g-dev libxslt1-dev
 
 # build gdcm and the executable
 # test with 3.0.20 instead of 3.0.5
