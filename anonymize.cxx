@@ -523,10 +523,27 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
 // standard if we start with our organizational root.
 //
 // We still do not fulfil the standard (http://dicom.nema.org/dicom/2013/output/chtml/part05/chapter_9.html)
-// because only 0-9 characters are allowed. 
+// because only 0-9 characters are allowed.
+
+// toDec() stupid attempt because 0-5 will be more often in the data compared to 6-9
+std::string toDec(SHA256::Byte *data, int size) {
+	std::string ret="";
+	for (int i=0;i<size;i++) {
+		const char *decdigit="0123456789012345";
+		ret+=decdigit[(data[i]>>4)&0xf]; // high 4 bits
+		ret+=decdigit[(data[i]   )&0xf]; // low 4 bits
+	}
+	return ret;
+}
+
+
 std::string betterUID(std::string val) {
   std::string prefix = "1.3.6.1.4.1.45037"; // organizational prefix for us
+  // We may support more modes in the future but for now we use a hex tail
   std::string hash = SHA256::digestString(val).toHex();
+  // Alternative way to create UIDs (without hex tail)
+  //SHA256::digest a = SHA256::digestString(val);
+  //std::string hash = toDec(a.data, a.size);
   std::string phash = prefix + "." + hash;
   return phash.substr(0,63); // bummer: this truncates our hash value
 }
