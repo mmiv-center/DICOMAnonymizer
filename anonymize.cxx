@@ -104,7 +104,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0018", "1200", "DateofLastCalibration", "incrementdate"},
     {"0018", "700c", "DateofLastDetectorCalibration", "incrementdate"},
     {"0018", "1012", "DateOfSecondaryCapture", "incrementdate"},
-    {"0012", "0063", "DeIdentificationMethod {Per DICOM PS 3.15 AnnexE. Details in 0012,0064}"},
+    {"0012", "0063", "DeIdentificationMethod {Per DICOM PS 3.15 AnnexE}"},
     {"0012", "0064", "DeIdentificationMethodCodeSequence", "113100/113101/113105/113107/113108/113109/113111"},
     {"0008", "2111", "DerivationDescription", "keep"},
     {"0018", "700a", "DetectorID", "keep"},
@@ -334,6 +334,70 @@ nlohmann::json work = nlohmann::json::array({
     {"0009", "1002", "SectraIdentExaminationID", "remove"}, // if 0009,0010 is SECTRA_Ident_01
 });
 
+std::string limitToMaxLength(gdcm::Tag t, std::string str_in, gdcm::DataSet &ds) {
+  // what is the value representation?
+  const gdcm::DataElement& de = ds.GetDataElement( t );
+  gdcm::VR vr = de.GetVR();
+  std::string VRName = gdcm::VR::GetVRString(vr);
+  if (VRName == "??") // don't know, do nothing
+    return str_in;
+  uint32_t max_l = 0;
+  if (VRName == "AE")
+    max_l = 16;
+  else if (VRName == "AS")
+    max_l = 4;
+  else if (VRName == "AT")
+    max_l = 4;
+  else if (VRName == "CS")
+    max_l = 16;
+  else if (VRName == "DA")
+    max_l = 8;
+  else if (VRName == "DS")
+    max_l = 16;
+  else if (VRName == "DT")
+    max_l = 26;
+  else if (VRName == "FL")
+    max_l = 4;
+  else if (VRName == "FD")
+    max_l = 8;
+  else if (VRName == "IS")
+    max_l = 12;
+  else if (VRName == "LO")
+    max_l = 64;
+  else if (VRName == "LT")
+    max_l = 10240;
+  else if (VRName == "SH")
+    max_l = 16;
+  else if (VRName == "SL")
+    max_l = 4;
+  else if (VRName == "SS")
+    max_l = 2;
+  else if (VRName == "ST")
+    max_l = 1024;
+  else if (VRName == "TM")
+    max_l = 16;
+  else if (VRName == "UI")
+    max_l = 64;
+  else if (VRName == "UL")
+    max_l = 4;
+  else if (VRName == "US")
+    max_l = 2;
+  else
+    return str_in; // do nothing
+  if (max_l == 0)
+    return str_in; // should never happen
+  
+  // check if length of str is longer than l
+  unsigned ll = str_in.length();
+  if (ll > max_l) {
+    fprintf(stderr, "Warning: tag value too long (%d), max: %d for VR: %s, will be truncated.\n", ll, max_l, gdcm::VR::GetVRString(vr));
+    std::string str_limited(str_in, 0, max_l);
+    return str_limited;
+  }
+  // no change
+  return str_in;
+}
+
 // anonymizes only two levels in a sequence
 void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqur) {
   gdcm::DataElement squr = dss->GetDataElement(*tsqur);
@@ -404,8 +468,9 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
             if (bv != NULL) {
               std::string dup(bv->GetPointer(), bv->GetLength());
               std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+	      std::string hash_limited = limitToMaxLength(aa, hash, *dss);
               // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
-              cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
+              cm.SetByteValue(hash_limited.c_str(), (uint32_t)hash_limited.size());
               // cm.SetVLToUndefined();
               // cm.SetVR(gdcm::VR::UI); // valid for ReferencedSOPInstanceUID
               nestedds.Replace(cm); // this does an erase and insert, we want to not invalidate our iterator here!
@@ -449,8 +514,9 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
                 if (bv != NULL) {
                   std::string dup(bv->GetPointer(), bv->GetLength());
                   std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+		  std::string hash_limited = limitToMaxLength(aa, hash, *dss);
                   // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
-                  cm.SetByteValue(hash.c_str(), (uint32_t)hash.size());
+                  cm.SetByteValue(hash_limited.c_str(), (uint32_t)hash_limited.size());
                   // cm.SetVLToUndefined();
                   // cm.SetVR(gdcm::VR::UI);
                   // valid for ReferencedSOPInstanceUID
@@ -535,7 +601,6 @@ std::string toDec(SHA256::Byte *data, int size) {
 	}
 	return ret;
 }
-
 
 std::string betterUID(std::string val) {
   std::string prefix = "1.3.6.1.4.1.45037"; // organizational prefix for us
@@ -694,19 +759,20 @@ void *ReadFilesThread(void *voidparams) {
         }
         // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
         // ns.c_str());
-        anon.Replace(gdcm::Tag(a, b), ns.c_str());
+	
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), ns, ds).c_str());
         continue;
       }
       if (which == "BlockOwner" && what != "replace") {
-        anon.Replace(gdcm::Tag(a, b), what.c_str());
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
         continue;
       }
       if (which == "ProjectName") {
-        anon.Replace(gdcm::Tag(a, b), params->projectname.c_str());
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
         continue;
       }
       if (what == "replace") {
-        anon.Replace(gdcm::Tag(a, b), which.c_str());
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), which, ds).c_str());
         continue;
       }
       if (what == "remove") {
@@ -742,7 +808,7 @@ void *ReadFilesThread(void *voidparams) {
           params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
         }
 
-        anon.Replace(gdcm::Tag(a, b), hash.c_str());
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
         // this does not replace elements inside sequences
         continue;
       }
@@ -768,7 +834,7 @@ void *ReadFilesThread(void *voidparams) {
 	  }
 	}
 
-        anon.Replace(gdcm::Tag(a, b), hash.c_str());
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
         continue;
       }
       if (what == "keep") {
@@ -789,13 +855,22 @@ void *ReadFilesThread(void *voidparams) {
           // fprintf(stdout, "found a date : %s, replace with date: %s\n",
           // val.c_str(), dat);
 
-          anon.Replace(gdcm::Tag(a, b), dat);
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), std::string(dat), ds).c_str());
         } else {
           // could not read the date here, just remove instead
           // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
           // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
           // which.c_str(), filename);
-          anon.Replace(gdcm::Tag(a, b), "");
+
+	  // The issue with empty dates is that we cannot get those back from the research PACS, we should instead use some
+	  // default dates to cover these cases. What is a good date range for this? Like any date in a specific year?
+	  std::string fixed_year("1970");
+	  int variable_month = (rand() % 12)+1;
+	  int day = 1;
+	  char dat[256];
+	  snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
+	  fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
+          anon.Replace(gdcm::Tag(a, b), dat);
         }
         continue;
       }
@@ -804,7 +879,7 @@ void *ReadFilesThread(void *voidparams) {
         std::string val = sf.ToString(gdcm::Tag(a, b));
         // parse the date string YYYYMMDDHHMMSS
         struct sdate date1;
-	char t[1024];
+	char t[248];
         if (sscanf(val.c_str(), "%04ld%02ld%02ld%s", &date1.y, &date1.m, &date1.d, t) == 4) {
           // replace with added value
           long c = gday(date1) + nd;
@@ -815,7 +890,7 @@ void *ReadFilesThread(void *voidparams) {
           // fprintf(stdout, "found a date : %s, replace with date: %s\n",
           // val.c_str(), dat);
 	  
-          anon.Replace(gdcm::Tag(a, b), dat);
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), std::string(dat), ds).c_str());
         } else {
           // could not read the date here, just remove instead
           // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
@@ -837,34 +912,34 @@ void *ReadFilesThread(void *voidparams) {
         continue;
       }
       if (what == "PROJECTNAME") {
-        anon.Replace(gdcm::Tag(a, b), params->projectname.c_str());
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
         continue;
       }
       if (what == "SITENAME") {
-        anon.Replace(gdcm::Tag(a, b), params->sitename.c_str());
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->sitename, ds).c_str());
         continue;
       }
       // Some entries have Re-Mapped, that could be a name on the command line or,
       // by default we should hash the id
       // fprintf(stdout, "Warning: set to what: %s %s which: %s what: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str());
       // fallback, if everything fails we just use the which and set that's field value
-      anon.Replace(gdcm::Tag(a, b), what.c_str());
+      anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
     }
 
     // hash of the patient id
     if (params->patientid == "hashuid") {
       std::string val = sf.ToString(gdcm::Tag(0x0010, 0x0010));
       std::string hash = SHA256::digestString(val).toHex();
-      anon.Replace(gdcm::Tag(0x0010, 0x0010), hash.c_str());
+      anon.Replace(gdcm::Tag(0x0010, 0x0010), limitToMaxLength(gdcm::Tag(0x0010, 0x0010), hash, ds).c_str());
     } else {
-      anon.Replace(gdcm::Tag(0x0010, 0x0010), params->patientid.c_str());
+      anon.Replace(gdcm::Tag(0x0010, 0x0010), limitToMaxLength(gdcm::Tag(0x0010, 0x0010), params->patientid, ds).c_str());
     }
     if (params->patientid == "hashuid") {
       std::string val = sf.ToString(gdcm::Tag(0x0010, 0x0020));
       std::string hash = SHA256::digestString(val).toHex();
-      anon.Replace(gdcm::Tag(0x0010, 0x0020), hash.c_str());
+      anon.Replace(gdcm::Tag(0x0010, 0x0020), limitToMaxLength(gdcm::Tag(0x0010, 0x0020), hash, ds).c_str());
     } else {
-      anon.Replace(gdcm::Tag(0x0010, 0x0020), params->patientid.c_str());
+      anon.Replace(gdcm::Tag(0x0010, 0x0020), limitToMaxLength(gdcm::Tag(0x0010, 0x0020), params->patientid, ds).c_str());
     }
 
     // We store the computed StudyInstanceUID in the StudyID tag.
@@ -877,7 +952,7 @@ void *ReadFilesThread(void *voidparams) {
     //        in the anonymized version of the data.
     //
     std::string anonStudyInstanceUID = sf.ToString(gdcm::Tag(0x0020, 0x000D));
-    anon.Replace(gdcm::Tag(0x0020, 0x0010), anonStudyInstanceUID.c_str());
+    anon.Replace(gdcm::Tag(0x0020, 0x0010), limitToMaxLength(gdcm::Tag(0x0020, 0x0010), anonStudyInstanceUID, ds).c_str());
 
     //{
     //  fprintf(stdout, "True studyInstanceUID is: %s\n", trueStudyInstanceUID.c_str());
