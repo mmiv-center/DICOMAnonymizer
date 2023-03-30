@@ -104,15 +104,15 @@ nlohmann::json work = nlohmann::json::array({
     {"fffc", "fffc", "DataSetTrailingPadding", "remove"},
     {"0018", "1200", "DateofLastCalibration", "incrementdate"},
     {"0018", "700c", "DateofLastDetectorCalibration", "incrementdate"},
-    {"0018", "1012", "DateOfSecondaryCapture", "incrementdate", "createIfMissing"},
-    {"0012", "0063", "DeIdentificationMethod {Per DICOM PS 3.15 AnnexE}", "createIfMissing"},
-    {"0012", "0064", "DeIdentificationMethodCodeSequence", "113100/113101/113105/113107/113108/113109/113111", "createIfMissing"},
-    {"0012", "0062", "PatientIdentityRemoved", "YES", "createIfMissing"},
-    {"0012", "0020", "Clinical Trial Protocol ID", "ProjectName", "createIfMissing"},
-    {"0012", "0021", "Clinical Trial Protocol Name", "ProjectName", "createIfMissing"},
-    {"0012", "0040", "Clinical Trial Subject ID", "PatientID", "createIfMissing"},
-    {"0012", "0050", "Clinical Trial Time Point ID", "EventName", "createIfMissing"},
-    {"0012", "0051", "Clinical Trial Time Point Description", "EventName", "createIfMissing"},
+    {"0018", "1012", "DateOfSecondaryCapture", "incrementdate", "", "createIfMissing"},
+    {"0012", "0063", "DeIdentificationMethod {Per DICOM PS 3.15 AnnexE}", "", "createIfMissing"},
+    {"0012", "0064", "DeIdentificationMethodCodeSequence", "113100/113101/113105/113107/113108/113109/113111", "", "createIfMissing"},
+    {"0012", "0062", "PatientIdentityRemoved", "YES", "", "createIfMissing"},
+    {"0012", "0020", "Clinical Trial Protocol ID", "ProjectName", "", "createIfMissing"},
+    {"0012", "0021", "Clinical Trial Protocol Name", "ProjectName", "", "createIfMissing"},
+    {"0012", "0040", "Clinical Trial Subject ID", "PatientID", "", "createIfMissing"},
+    {"0012", "0050", "Clinical Trial Time Point ID", "EventName", "", "createIfMissing"},
+    {"0012", "0051", "Clinical Trial Time Point Description", "EventName", "", "createIfMissing"},
     {"0008", "2111", "DerivationDescription", "keep"},
     {"0018", "700a", "DetectorID", "keep"},
     {"0018", "1000", "DeviceSerialNumber", "keep"},
@@ -146,7 +146,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0008", "0081", "InstitutionAddress", "remove"},
     {"0008", "1040", "InstitutionalDepartmentName", "remove"},
     {"0008", "0082", "InstitutionCodeSequence", "remove"},
-    {"0008", "0080", "InstitutionName", "remove", "createIfMissing"},
+    {"0008", "0080", "InstitutionName", "remove", "", "createIfMissing"},
     {"0010", "1050", "InsurancePlanIdentification", "remove"},
     {"0040", "1011", "IntendedRecipientsOfResultsIDSequence", "remove"},
     {"4008", "0111", "InterpretationApproverSequence", "remove"},
@@ -195,11 +195,11 @@ nlohmann::json work = nlohmann::json::array({
     {"0010", "1005", "PatientBirthName", "remove"},
     {"0010", "0032", "PatientBirthTime", "remove"},
     {"0010", "4000", "PatientComments", "keep"},
-    {"0010", "0020", "PatientID", "Re-Mapped", "createIfMissing"},
+    {"0010", "0020", "PatientID", "Re-Mapped", "", "createIfMissing"},
     {"0038", "0400", "PatientInstitutionResidence", "remove"},
     {"0010", "0050", "PatientInsurancePlanCodeSeq", "remove"},
     {"0010", "1060", "PatientMotherBirthName", "remove"},
-    {"0010", "0010", "PatientName", "Re-Mapped", "createIfMissing"},
+    {"0010", "0010", "PatientName", "Re-Mapped", "", "createIfMissing"},
     {"0010", "2154", "PatientPhoneNumbers", "remove"},
     {"0010", "0101", "PatientPrimaryLanguageCodeSeq", "remove"},
     {"0010", "0102", "PatientPrimaryLanguageModifierCodeSeq", "remove"},
@@ -245,7 +245,7 @@ nlohmann::json work = nlohmann::json::array({
     {"3006", "0024", "ReferencedFrameOfReferenceUID", "hashuid+PROJECTNAME"},
     {"0038", "0004", "ReferencedPatientAliasSeq", "remove"},
     {"0008", "0092", "ReferringPhysicianAddress", "remove"},
-    {"0008", "0090", "ReferringPhysicianName", "empty", "createIfMissing"},
+    {"0008", "0090", "ReferringPhysicianName", "empty", "", "createIfMissing"},
     {"0008", "0094", "ReferringPhysicianPhoneNumbers", "remove"},
     {"0008", "0096", "ReferringPhysiciansIDSeq", "remove"},
     {"0040", "4023", "RefGenPurposeSchedProcStepTransUID", "hashuid"},
@@ -308,12 +308,12 @@ nlohmann::json work = nlohmann::json::array({
     {"0032", "1040", "StudyArrivalDate", "incrementdate"},
     {"0032", "4000", "StudyComments", "keep"},
     {"0032", "1050", "StudyCompletionDate", "incrementdate"},
-    {"0008", "0020", "StudyDate", "incrementdate", "createIfMissing"},
+    {"0008", "0020", "StudyDate", "incrementdate", "", "createIfMissing"},
     {"0008", "1030", "StudyDescription", "keep"},
     {"0020", "0010", "StudyID", "empty"},
     {"0032", "0012", "StudyIDIssuer", "remove"},
     {"0020", "000d", "StudyInstanceUID", "hashuid+PROJECTNAME"},
-    {"0008", "0030", "StudyTime", "keep", "createIfMissing"},
+    {"0008", "0030", "StudyTime", "keep", "", "createIfMissing"},
     {"0020", "0200", "SynchronizationFrameOfReferenceUID", "hashuid"},
     {"0040", "db0d", "TemplateExtensionCreatorUID", "hashuid"},
     {"0040", "db0c", "TemplateExtensionOrganizationUID", "hashuid"},
@@ -699,18 +699,14 @@ void *ReadFilesThread(void *voidparams) {
     gdcm::StringFilter sf;
     sf.SetFile(fileToAnon);
 
+    //
     // we might have some tags that should always be present, can we create those please?
+    //
     for (int i = 0; i < work.size(); i++) {
-      // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
       std::string tag1(work[i][0]);
       std::string tag2(work[i][1]);
       std::string which(work[i][2]);
-      std::string what("replace");
-      bool regexp = false;
-      if (work[i].size() > 3) {
-        what = work[i][3];
-      }
-      if (work[i].size() <= 3 || work[i][4] != "createIfMissing") {
+      if (work[i].size() <= 4 || work[i][5] != "createIfMissing") {
         continue;
       }
       // we have a new entry, could be createIfMissing
@@ -741,11 +737,6 @@ void *ReadFilesThread(void *voidparams) {
     // lets add the private group entries
     // gdcm::AddTag(gdcm::Tag(0x65010010), gdcm::VR::LO, "MY NEW DATASET", reader.GetFile().GetDataSet());
 
-    // There are some tags that we can assume have to exist. For example the
-    // tags that code for the institution name. We should add it here for all
-    
-
-    
     // now walk through the list of entries and apply each one to the current ds
     for (int i = 0; i < work.size(); i++) {
       // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
@@ -761,16 +752,16 @@ void *ReadFilesThread(void *voidparams) {
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
       // if we don't have this dataelement, don't do anything
-      if (!ds.FindDataElement(gdcm::Tag(a, b))) {
-	// In some cases we need to create the element, like if
-	// we receive that value on the command line.
-	if (work[i].size() > 5 && work[i][5] == "1") {
-	  // we add this entry so it can be written to further down
-	  anon.Empty(gdcm::Tag(a, b));
-	} else {
-	  continue;
-	}
-      }
+      /*if (!ds.FindDataElement(gdcm::Tag(a, b))) {
+        // In some cases we need to create the element, like if
+        // we receive that value on the command line.
+        if (work[i].size() > 5 && (work[i][5] == "1" || work[i][5] == "createIfMissing")) {
+          // we add this entry so it can be written to further down
+          anon.Empty(gdcm::Tag(a, b)); // does not work
+        } else {
+          continue;
+        }
+      }*/
 
       if (work[i].size() > 4 && work[i][4] == "regexp") {
         regexp = true;
@@ -1103,6 +1094,13 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
     gl.GetDicts().GetPrivateDict().RemoveDictEntry(gdcm::Tag(0x0013, 0x1012));
   }
   gl.GetDicts().GetPrivateDict().AddDictEntry(gdcm::Tag(0x0013, 0x1012), gdcm::DictEntry("SiteName", "0x0013, 0x1012", gdcm::VR::LO, gdcm::VM::VM1));
+
+  // we might need to add some value representations for 0012 as well. They are mandatory so we should do the coding right and they
+  // don't seem to be in the default dicom.dict
+  gl.GetDicts().GetPublicDict().AddDictEntry(gdcm::Tag(0x0012, 0x0020),
+                                             gdcm::DictEntry("ClinicalTrialProtocolID", "0x0012, 0x0020", gdcm::VR::LO, gdcm::VM::VM1));
+  gl.GetDicts().GetPublicDict().AddDictEntry(gdcm::Tag(0x0012, 0x0021),
+                                             gdcm::DictEntry("ClinicalTrialProtocolName", "0x0012, 0x0021", gdcm::VR::LO, gdcm::VM::VM1));
 
   /*  const char *reference = filenames[0]; // take the first image as reference
 
@@ -1459,8 +1457,8 @@ int main(int argc, char *argv[]) {
               // found and overwrite
               found = true;
               work[i][3] = res; // overwrite the value, [2] is name
-	      work[i][4] = std::string("");
-	      work[i][5] = std::string("1");
+              work[i][4] = std::string("");
+              work[i][5] = std::string("createIfMissing");
             }
           }
           if (!found) {
@@ -1516,7 +1514,7 @@ int main(int argc, char *argv[]) {
               found = true;
               work[i][3] = res;      // overwrite the value, [2] is name
               work[i][4] = "regexp"; // mark this as a regular expression tag change
-	      work[i][5] = "1";      // mark as imported from command line - needs to be written even if missing
+              work[i][5] = "1";      // mark as imported from command line - needs to be written even if missing
             }
           }
           if (!found) {
