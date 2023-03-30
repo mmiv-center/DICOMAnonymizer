@@ -1507,7 +1507,7 @@ int main(int argc, char *argv[]) {
               found = true;
               work[i][3] = res;      // overwrite the value, [2] is name
               work[i][4] = "regexp"; // mark this as a regular expression tag change
-              work[i][5] = "1";      // mark as imported from command line - needs to be written even if missing
+              work[i][5] = "createIfMissing"; // mark as imported from command line - needs to be written even if missing
             }
           }
           if (!found) {
