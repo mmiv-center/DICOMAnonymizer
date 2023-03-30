@@ -49,6 +49,7 @@ struct threadparams {
   std::string patientid;
   std::string projectname;
   std::string sitename;
+  std::string eventname;
   std::string siteid;
   int dateincrement;
   bool byseries;
@@ -106,6 +107,12 @@ nlohmann::json work = nlohmann::json::array({
     {"0018", "1012", "DateOfSecondaryCapture", "incrementdate"},
     {"0012", "0063", "DeIdentificationMethod {Per DICOM PS 3.15 AnnexE}"},
     {"0012", "0064", "DeIdentificationMethodCodeSequence", "113100/113101/113105/113107/113108/113109/113111"},
+    {"0012", "0062", "PatientIdentityRemoved", "YES"},
+    {"0012", "0020", "Clinical Trial Protocol ID", "ProjectName"},
+    {"0012", "0021", "Clinical Trial Protocol Name", "ProjectName"},
+    {"0012", "0040", "Clinical Trial Subject ID", "PatientID"},
+    {"0012", "0050", "Clinical Trial Time Point ID", "EventName"},
+    {"0012", "0051", "Clinical Trial Time Point Description", "EventName"},
     {"0008", "2111", "DerivationDescription", "keep"},
     {"0018", "700a", "DetectorID", "keep"},
     {"0018", "1000", "DeviceSerialNumber", "keep"},
@@ -189,7 +196,6 @@ nlohmann::json work = nlohmann::json::array({
     {"0010", "0032", "PatientBirthTime", "remove"},
     {"0010", "4000", "PatientComments", "keep"},
     {"0010", "0020", "PatientID", "Re-Mapped"},
-    {"0012", "0062", "PatientIdentityRemoved", "YES"},
     {"0038", "0400", "PatientInstitutionResidence", "remove"},
     {"0010", "0050", "PatientInsurancePlanCodeSeq", "remove"},
     {"0010", "1060", "PatientMotherBirthName", "remove"},
@@ -330,7 +336,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0033", "1016", "SomeSiemensMITRA", "remove"},
     {"0033", "1019", "SomeSiemensMITRA", "remove"},
     {"0033", "101c", "SomeSiemensMITRA", "remove"},
-    {"0009", "1001", "SectraIdentRequestID", "remove"}, // if 0009,0010 is SECTRA_Ident_01
+    {"0009", "1001", "SectraIdentRequestID", "remove"},     // if 0009,0010 is SECTRA_Ident_01
     {"0009", "1002", "SectraIdentExaminationID", "remove"}, // if 0009,0010 is SECTRA_Ident_01
 });
 
@@ -767,8 +773,16 @@ void *ReadFilesThread(void *voidparams) {
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
         continue;
       }
-      if (which == "ProjectName") {
+      if (which == "ProjectName" || which == "PROJECTNAME") {
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
+        continue;
+      }
+      if (which == "PatientID" || which == "PATIENTID") {
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
+        continue;
+      }
+      if (which == "EventName" || which == "EVENTNAME") {
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->eventname, ds).c_str());
         continue;
       }
       if (what == "replace") {
@@ -1035,7 +1049,7 @@ void ShowFilenames(const threadparams &params) {
 }
 
 void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, const char *patientid, int dateincrement, bool byseries, int numthreads,
-               const char *projectname, const char *sitename, const char *siteid, std::string storeMappingAsJSON) {
+               const char *projectname, const char *sitename, const char *eventname, const char *siteid, std::string storeMappingAsJSON) {
   // \precondition: nfiles > 0
   assert(nfiles > 0);
 
@@ -1097,6 +1111,7 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
     params[thread].filenames = filenames + thread * partition;
     params[thread].outputdir = outputdir;
     params[thread].patientid = patientid;
+    params[thread].eventname = eventname;
     params[thread].nfiles = partition;
     params[thread].dateincrement = dateincrement;
     params[thread].byseries = byseries;
@@ -1177,6 +1192,7 @@ enum optionIndex {
   INPUT,
   OUTPUT,
   PATIENTID,
+  EVENTNAME,
   PROJECTNAME,
   SITENAME,
   DATEINCREMENT,
@@ -1199,6 +1215,7 @@ const option::Descriptor usage[] = {
     {INPUT, 0, "i", "input", Arg::Required, "  --input, -i  \tInput directory."},
     {OUTPUT, 0, "o", "output", Arg::Required, "  --output, -o  \tOutput directory."},
     {PATIENTID, 0, "p", "patientid", Arg::Required, "  --patientid, -p  \tPatient ID after anonymization (default is \"hashuid\" to hash the existing id)."},
+    {EVENTNAME, 0, "e", "eventname", Arg::Required, "  --eventname, -e  \tEvent name string (default is \"\")."},
     {PROJECTNAME, 0, "j", "projectname", Arg::Required, "  --projectname, -j  \tProject name."},
     {SITENAME, 0, "s", "sitename", Arg::Required, "  --sitename, -s  \tSite name."},
     {SITEID, 0, "d", "siteid", Arg::Required, "  --siteid, -s  \tSite id."},
@@ -1285,6 +1302,7 @@ int main(int argc, char *argv[]) {
   std::string patientID = "hashuid"; // mark the default value as hash the existing uids for patientID and patientName
   std::string sitename = " ";
   std::string siteid = "";
+  std::string eventname = "";
   int dateincrement = 42;
   std::string exportanonfilename = ""; // anon.json
   bool byseries = false;
@@ -1339,6 +1357,15 @@ int main(int argc, char *argv[]) {
           sitename = opt.arg;
         } else {
           fprintf(stdout, "--sitename needs a string specified\n");
+          exit(-1);
+        }
+        break;
+      case EVENTNAME:
+        if (opt.arg) {
+          fprintf(stdout, "--eventname '%s'\n", opt.arg);
+          eventname = opt.arg;
+        } else {
+          fprintf(stdout, "--eventname needs a string specified\n");
           exit(-1);
         }
         break;
@@ -1541,8 +1568,8 @@ int main(int argc, char *argv[]) {
     }
 
     // ReadFiles(nfiles, filenames, output.c_str(), numthreads, confidence, storeMappingAsJSON);
-    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, numthreads, projectname.c_str(), sitename.c_str(), siteid.c_str(),
-              storeMappingAsJSON);
+    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, numthreads, projectname.c_str(), sitename.c_str(),
+              eventname.c_str(), siteid.c_str(), storeMappingAsJSON);
     delete[] filenames;
   } else {
     // its a single file, process that
