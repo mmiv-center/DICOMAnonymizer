@@ -716,6 +716,9 @@ void *ReadFilesThread(void *voidparams) {
       if (!ds.FindDataElement(gdcm::Tag(a, b))) {
         // add the element, we want to have it in all files we produce
         gdcm::DataElement elem(gdcm::Tag(a, b));
+        // set the correct VR - if that is in the dictionary
+        gdcm::Global gl;
+        elem.SetVR(gl.GetDicts().GetDictEntry(gdcm::Tag(a, b), (const char *)nullptr).GetVR());
         size_t len = 0;
         char *buf = new char[len];
         elem.SetByteValue(buf, (uint32_t)len);
