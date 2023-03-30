@@ -1095,15 +1095,6 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
   }
   gl.GetDicts().GetPrivateDict().AddDictEntry(gdcm::Tag(0x0013, 0x1012), gdcm::DictEntry("SiteName", "0x0013, 0x1012", gdcm::VR::LO, gdcm::VM::VM1));
 
-  // we might need to add some value representations for 0012 as well. They are mandatory so we should do the coding right and they
-  // don't seem to be in the default dicom.dict
-  const gdcm::Tag t1 = gdcm::Tag(0x0012, 0x0020);
-  const gdcm::DictEntry t2 = gdcm::DictEntry("ClinicalTrialProtocolID", "0x0012, 0x0020", gdcm::VR::LO, gdcm::VM::VM1);
-
-  gl.GetDicts().GetPublicDict().AddDictEntry(t1, t2);
-  gl.GetDicts().GetPublicDict().AddDictEntry(gdcm::Tag(0x0012, 0x0021),
-                                             gdcm::DictEntry("ClinicalTrialProtocolName", "0x0012, 0x0021", gdcm::VR::LO, gdcm::VM::VM1));
-
   /*  const char *reference = filenames[0]; // take the first image as reference
 
     gdcm::ImageReader reader;
