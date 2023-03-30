@@ -720,7 +720,12 @@ void *ReadFilesThread(void *voidparams) {
         gdcm::DataElement elem(gdcm::Tag(a, b));
         // set the correct VR - if that is in the dictionary
         gdcm::Global gl;
-        elem.SetVR(gl.GetDicts().GetDictEntry(gdcm::Tag(a, b), (const char *)nullptr).GetVR());
+        // hope this works always... not sure here
+        try {
+          elem.SetVR(gl.GetDicts().GetDictEntry(gdcm::Tag(a, b), (const char *)nullptr).GetVR());
+        } catch (const std::exception &ex) {
+          std::cout << "Caught exception \"" << ex.what() << "\"\n";
+        }
         size_t len = 0;
         char *buf = new char[len];
         elem.SetByteValue(buf, (uint32_t)len);
@@ -805,7 +810,11 @@ void *ReadFilesThread(void *voidparams) {
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
         continue;
       }
-      if (which == "EventName" || which == "EVENTNAME") {
+      if (what == "PatientID" || what == "PATIENTID") {
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
+        continue;
+      }
+      if (what == "EventName" || what == "EVENTNAME") {
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->eventname, ds).c_str());
         continue;
       }
