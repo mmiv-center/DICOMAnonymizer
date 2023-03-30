@@ -105,8 +105,9 @@ nlohmann::json work = nlohmann::json::array({
     {"0018", "1200", "DateofLastCalibration", "incrementdate"},
     {"0018", "700c", "DateofLastDetectorCalibration", "incrementdate"},
     {"0018", "1012", "DateOfSecondaryCapture", "incrementdate", "", "createIfMissing"},
-    {"0012", "0063", "DeIdentificationMethod {Per DICOM PS 3.15 AnnexE}", "", "createIfMissing"},
-    {"0012", "0064", "DeIdentificationMethodCodeSequence", "113100/113101/113105/113107/113108/113109/113111", "", "createIfMissing"},
+    {"0012", "0063", "DeIdentificationMethod", "{Per DICOM PS 3.15 AnnexE}", "", "createIfMissing"},
+    {"0012", "0064", "DeIdentificationMethodCodeSequence", "113100/113101/113105/113107/113108/113109/113111", "",
+     "createIfMissing"}, // TODO: this has to be written as SQ
     {"0012", "0062", "PatientIdentityRemoved", "YES", "", "createIfMissing"},
     {"0012", "0020", "Clinical Trial Protocol ID", "ProjectName", "", "createIfMissing"},
     {"0012", "0021", "Clinical Trial Protocol Name", "ProjectName", "", "createIfMissing"},
