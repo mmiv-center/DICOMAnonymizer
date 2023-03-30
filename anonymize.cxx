@@ -810,6 +810,10 @@ void *ReadFilesThread(void *voidparams) {
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
         continue;
       }
+      if (what == "ProjectName" || what == "PROJECTNAME") {
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->projectname, ds).c_str());
+        continue;
+      }
       if (what == "PatientID" || what == "PATIENTID") {
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
         continue;
