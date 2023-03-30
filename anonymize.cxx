@@ -713,7 +713,9 @@ void *ReadFilesThread(void *voidparams) {
       // check if the key exists by asking for its value
       int a = strtol(tag1.c_str(), NULL, 16);
       int b = strtol(tag2.c_str(), NULL, 16);
+      fprintf(stderr, "Looking for %s, ", which.c_str());
       if (!ds.FindDataElement(gdcm::Tag(a, b))) {
+        fprintf(stderr, " - could not find it, add now\n");
         // add the element, we want to have it in all files we produce
         gdcm::DataElement elem(gdcm::Tag(a, b));
         // set the correct VR - if that is in the dictionary
