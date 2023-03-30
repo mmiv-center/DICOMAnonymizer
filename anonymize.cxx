@@ -713,10 +713,10 @@ void *ReadFilesThread(void *voidparams) {
       // check if the key exists by asking for its value
       int a = strtol(tag1.c_str(), NULL, 16);
       int b = strtol(tag2.c_str(), NULL, 16);
-      fprintf(stderr, "Looking for %s, ", which.c_str());
+      // fprintf(stderr, "Looking for %s, ", which.c_str());
       if (!ds.FindDataElement(gdcm::Tag(a, b))) {
-        fprintf(stderr, " - could not find it, add now\n");
-        // add the element, we want to have it in all files we produce
+        // fprintf(stderr, " - could not find it, add now\n");
+        //  add the element, we want to have it in all files we produce
         gdcm::DataElement elem(gdcm::Tag(a, b));
         // set the correct VR - if that is in the dictionary
         gdcm::Global gl;
@@ -913,14 +913,14 @@ void *ReadFilesThread(void *voidparams) {
           // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
           // which.c_str(), filename);
 
-	  // The issue with empty dates is that we cannot get those back from the research PACS, we should instead use some
-	  // default dates to cover these cases. What is a good date range for this? Like any date in a specific year?
-	  std::string fixed_year("1970");
-	  int variable_month = (rand() % 12)+1;
-	  int day = 1;
-	  char dat[256];
-	  snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
-	  fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
+          // The issue with empty dates is that we cannot get those back from the research PACS, we should instead use some
+          // default dates to cover these cases. What is a good date range for this? Like any date in a specific year?
+          std::string fixed_year("1970");
+          int variable_month = (rand() % 12) + 1;
+          int day = 1;
+          char dat[256];
+          snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
+          // fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
           anon.Replace(gdcm::Tag(a, b), dat);
         }
         continue;
