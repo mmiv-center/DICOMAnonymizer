@@ -699,6 +699,34 @@ void *ReadFilesThread(void *voidparams) {
     gdcm::StringFilter sf;
     sf.SetFile(fileToAnon);
 
+    // we might have some tags that should always be present, can we create those please?
+    for (int i = 0; i < work.size(); i++) {
+      // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
+      std::string tag1(work[i][0]);
+      std::string tag2(work[i][1]);
+      std::string which(work[i][2]);
+      std::string what("replace");
+      bool regexp = false;
+      if (work[i].size() > 3) {
+        what = work[i][3];
+      }
+      if (work[i].size() <= 3 || work[i][4] != "createIfMissing") {
+        continue;
+      }
+      // we have a new entry, could be createIfMissing
+      // check if the key exists by asking for its value
+      int a = strtol(tag1.c_str(), NULL, 16);
+      int b = strtol(tag2.c_str(), NULL, 16);
+      if (!ds.FindDataElement(gdcm::Tag(a, b))) {
+        // add the element, we want to have it in all files we produce
+        gdcm::DataElement elem(gdcm::Tag(a, b));
+        size_t len = 0;
+        char *buf = new char[len];
+        elem.SetByteValue(buf, (uint32_t)len);
+        ds.Insert(elem);
+      }
+    }
+
     // use the following tags
     // https://wiki.cancerimagingarchive.net/display/Public/De-identification+Knowledge+Base
 
