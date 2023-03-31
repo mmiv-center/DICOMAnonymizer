@@ -107,7 +107,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0018", "1012", "DateOfSecondaryCapture", "incrementdate", "", "createIfMissing"},
     {"0012", "0063", "DeIdentificationMethod", "{Per DICOM PS 3.15 AnnexE}", "", "createIfMissing"},
     {"0012", "0064", "DeIdentificationMethodCodeSequence", "113100/113101/113105/113107/113108/113109/113111", "",
-     "createIfMissing"}, // TODO: this has to be written as SQ
+     "createIfMissing"}, // TODO: this has to be written as SQ? We don't need this field if DeIdentificationMethod is there...
     {"0012", "0062", "PatientIdentityRemoved", "YES", "", "createIfMissing"},
     {"0012", "0020", "Clinical Trial Protocol ID", "ProjectName", "", "createIfMissing"},
     {"0012", "0021", "Clinical Trial Protocol Name", "ProjectName", "", "createIfMissing"},
@@ -716,21 +716,66 @@ void *ReadFilesThread(void *voidparams) {
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stderr, "Looking for %s, ", which.c_str());
       if (!ds.FindDataElement(gdcm::Tag(a, b))) {
-        // fprintf(stderr, " - could not find it, add now\n");
-        //  add the element, we want to have it in all files we produce
-        gdcm::DataElement elem(gdcm::Tag(a, b));
-        // set the correct VR - if that is in the dictionary
-        gdcm::Global gl;
-        // hope this works always... not sure here
-        try {
-          elem.SetVR(gl.GetDicts().GetDictEntry(gdcm::Tag(a, b), (const char *)nullptr).GetVR());
-        } catch (const std::exception &ex) {
-          std::cout << "Caught exception \"" << ex.what() << "\"\n";
+
+        // if the inserted element is a sequence we need to do more
+        // Example
+        if (which == "DeIdentificationMethodCodeSequence") {
+          // add a sequence instead of a simple tag
+          // for a sequence we need a Data Element first
+          // insert the DataElement into an item
+          // create a SequenceOfItems and add item
+          // add sequence to dataset
+
+          // Create a data element
+          gdcm::DataElement de(gdcm::Tag(a, b));
+          de.SetVR(gdcm::VR(gdcm::VR::VRType::SQ));
+
+          gdcm::SmartPointer<gdcm::SequenceOfItems> sq = new gdcm::SequenceOfItems();
+          sq->SetLengthToUndefined();
+
+          // Create an item
+          gdcm::Item it;
+          it.SetVLToUndefined(); // Needed to not popup error message
+
+          gdcm::DataElement de2(gdcm::Tag(0x0008, 0x0104));
+          std::string aaa = "CodeMeaning";
+          size_t len = aaa.size();
+          char *buf = new char[len];
+          strncpy(buf, aaa.c_str(), len);
+          de2.SetByteValue(buf, (uint32_t)len);
+          de2.SetVR(gdcm::VR(gdcm::VR::VRType::LO));
+
+          gdcm::DataSet nds = it.GetNestedDataSet();
+          nds.Insert(de2);
+
+          gdcm::DataElement de3(gdcm::Tag(0x0008, 0x0100));
+          std::string aaa = "CodeValue";
+          size_t len = aaa.size();
+          char *buf = new char[len];
+          strncpy(buf, aaa.c_str(), len);
+          de3.SetByteValue(buf, (uint32_t)len);
+          de3.SetVR(gdcm::VR(gdcm::VR::VRType::SH));
+          nds.Insert(de3);
+
+          sq->AddItem(it);
+          de.SetValue(*sq);
+          ds.Insert(de);
+        } else {
+          //  add the element, we want to have it in all files we produce
+          gdcm::DataElement elem(gdcm::Tag(a, b));
+          // set the correct VR - if that is in the dictionary
+          gdcm::Global gl;
+          // hope this works always... not sure here
+          try {
+            elem.SetVR(gl.GetDicts().GetDictEntry(gdcm::Tag(a, b), (const char *)nullptr).GetVR());
+          } catch (const std::exception &ex) {
+            std::cout << "Caught exception \"" << ex.what() << "\"\n";
+          }
+          size_t len = 0;
+          char *buf = new char[len];
+          elem.SetByteValue(buf, (uint32_t)len);
+          ds.Insert(elem);
         }
-        size_t len = 0;
-        char *buf = new char[len];
-        elem.SetByteValue(buf, (uint32_t)len);
-        ds.Insert(elem);
       }
     }
 
