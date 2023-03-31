@@ -1420,6 +1420,7 @@ void *ReadFilesThread(void *voidparams) {
         bool found = false;
         for (int i = 0; i < allowedBodyParts.size(); i++) {
           // what is the current value in this tag?
+          fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBodyParts[i][3].c_str());
           if (input_bodypart.compare(allowedBodyParts[i][3]) == 0) {
             // allowed string, keep it
             found = true;
