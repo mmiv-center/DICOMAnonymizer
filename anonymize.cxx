@@ -745,7 +745,7 @@ void *ReadFilesThread(void *voidparams) {
           de2.SetByteValue(buf, (uint32_t)len);
           de2.SetVR(gdcm::VR(gdcm::VR::VRType::LO));
 
-          gdcm::DataSet nds = it.GetNestedDataSet();
+          gdcm::DataSet &nds = it.GetNestedDataSet();
           nds.Insert(de2);
 
           gdcm::DataElement de3(gdcm::Tag(0x0008, 0x0100));
