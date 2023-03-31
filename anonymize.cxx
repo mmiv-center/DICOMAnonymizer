@@ -1418,10 +1418,10 @@ void *ReadFilesThread(void *voidparams) {
         // allow all allowedBodyParts, or set to BODYPART
         std::string input_bodypart = sf.ToString(gdcm::Tag(a, b));
         bool found = false;
-        for (int i = 0; i < allowedBodyParts.size(); i++) {
+        for (int b_idx = 0; b_idx < allowedBodyParts.size(); b_idx++) {
           // what is the current value in this tag?
-          fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBodyParts[i][3].c_str());
-          if (input_bodypart.compare(allowedBodyParts[i][3]) == 0) {
+          fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), std::string(allowedBodyParts[b_idx][3]).c_str());
+          if (input_bodypart.compare(allowedBodyParts[b_idx][3]) == 0) {
             // allowed string, keep it
             found = true;
             break;
