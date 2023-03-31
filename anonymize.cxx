@@ -1425,8 +1425,7 @@ void *ReadFilesThread(void *voidparams) {
           if (allowedBP.size() % 2 == 1) { // we need even length strings for comparisson
             allowedBP += " ";
           }
-          fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBP.c_str());
-
+          // fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBP.c_str());
           if (input_bodypart.compare(allowedBP) == 0) {
             // allowed string, keep it
             found = true;
