@@ -738,7 +738,7 @@ void *ReadFilesThread(void *voidparams) {
           it.SetVLToUndefined(); // Needed to not popup error message
 
           gdcm::DataElement de2(gdcm::Tag(0x0008, 0x0104));
-          std::string aaa = "CodeMeaning";
+          std::string aaa = "Software"; // CodeMeaning
           size_t len = aaa.size();
           char *buf = new char[len];
           strncpy(buf, aaa.c_str(), len);
@@ -749,11 +749,11 @@ void *ReadFilesThread(void *voidparams) {
           nds.Insert(de2);
 
           gdcm::DataElement de3(gdcm::Tag(0x0008, 0x0100));
-          std::string aaa = "CodeValue";
-          size_t len = aaa.size();
-          char *buf = new char[len];
-          strncpy(buf, aaa.c_str(), len);
-          de3.SetByteValue(buf, (uint32_t)len);
+          aaa = "github.com/mmiv-center/DICOMAnonymizer"; // CodeValue
+          len = aaa.size();
+          char *buf2 = new char[len];
+          strncpy(buf2, aaa.c_str(), len);
+          de3.SetByteValue(buf2, (uint32_t)len);
           de3.SetVR(gdcm::VR(gdcm::VR::VRType::SH));
           nds.Insert(de3);
 
@@ -1285,7 +1285,8 @@ enum optionIndex {
   TAGCHANGE,
   STOREMAPPING,
   SITEID,
-  REGTAGCHANGE
+  REGTAGCHANGE,
+  VERSION
 };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
@@ -1301,7 +1302,7 @@ const option::Descriptor usage[] = {
     {EVENTNAME, 0, "e", "eventname", Arg::Required, "  --eventname, -e  \tEvent name string (default is \"\")."},
     {PROJECTNAME, 0, "j", "projectname", Arg::Required, "  --projectname, -j  \tProject name."},
     {SITENAME, 0, "s", "sitename", Arg::Required, "  --sitename, -s  \tSite name."},
-    {SITEID, 0, "d", "siteid", Arg::Required, "  --siteid, -s  \tSite id."},
+    {SITEID, 0, "w", "siteid", Arg::Required, "  --siteid, -w  \tSite id."},
     {DATEINCREMENT, 0, "d", "dateincrement", Arg::Required, "  --dateincrement, -d  \tNumber of days that should be added to dates."},
     {EXPORTANON, 0, "a", "exportanon", Arg::Required,
      "  --exportanon, -a  \tWrites the anonymization structure as a json file "
@@ -1314,6 +1315,7 @@ const option::Descriptor usage[] = {
     {REGTAGCHANGE, 0, "R", "regtagchange", Arg::Required,
      "  --regtagchange, -R  \tChanges the default behavior for a tag in the build-in rules (understands regular expressions, retains all capturing groups)."},
     {NUMTHREADS, 0, "t", "numthreads", Arg::Required, "  --numthreads, -t  \tHow many threads should be used (default 4)."},
+    {VERSION, 0, "v", "version", Arg::None, "  --version, -v  \tPrint version number."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
      "  anonymize --input directory --output directory --patientid bla -d 42 -b\n"
@@ -1374,6 +1376,11 @@ int main(int argc, char *argv[]) {
 
   if (options[HELP] || argc == 0) {
     option::printUsage(std::cout, usage);
+    return 0;
+  }
+
+  if (options[VERSION]) {
+    fprintf(stdout, "anonymizer version 1.0.0");
     return 0;
   }
 
