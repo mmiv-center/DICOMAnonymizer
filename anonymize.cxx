@@ -725,6 +725,8 @@ void *ReadFilesThread(void *voidparams) {
           // insert the DataElement into an item
           // create a SequenceOfItems and add item
           // add sequence to dataset
+          // TODO: the RSNA entries are numerical codes such as 113107, see
+          // https://www.rsna.org/-/media/Files/RSNA/Covid-19/RICORD/RSNA-Covid-19-Deidentification-Protocol.pdf
 
           // Create a data element
           gdcm::DataElement de(gdcm::Tag(a, b));
@@ -745,9 +747,6 @@ void *ReadFilesThread(void *voidparams) {
           de2.SetByteValue(buf, (uint32_t)len);
           de2.SetVR(gdcm::VR(gdcm::VR::VRType::LO));
 
-          gdcm::DataSet &nds = it.GetNestedDataSet();
-          nds.Insert(de2);
-
           gdcm::DataElement de3(gdcm::Tag(0x0008, 0x0100));
           aaa = "github.com/mmiv-center/DICOMAnonymizer"; // CodeValue
           len = aaa.size();
@@ -755,6 +754,9 @@ void *ReadFilesThread(void *voidparams) {
           strncpy(buf2, aaa.c_str(), len);
           de3.SetByteValue(buf2, (uint32_t)len);
           de3.SetVR(gdcm::VR(gdcm::VR::VRType::SH));
+
+          gdcm::DataSet &nds = it.GetNestedDataSet();
+          nds.Insert(de2);
           nds.Insert(de3);
 
           sq->AddItem(it);
@@ -1380,7 +1382,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (options[VERSION]) {
-    fprintf(stdout, "anonymizer version 1.0.0");
+    fprintf(stdout, "anonymizer version 1.0.1\n");
     return 0;
   }
 
