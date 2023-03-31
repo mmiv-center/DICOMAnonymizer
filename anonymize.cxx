@@ -1414,6 +1414,22 @@ void *ReadFilesThread(void *voidparams) {
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->eventname, ds).c_str());
         continue;
       }
+      if (which == "BodyPartExamined" && what == "BODYPART") {
+        // allow all allowedBodyParts, or set to BODYPART
+        std::string input_bodypart = sf.ToString(gdcm::Tag(a, b));
+        bool found = false;
+        for (int i = 0; i < allowedBodyParts.size(); i++) {
+          // what is the current value in this tag?
+          if (input_bodypart.compare(allowedBodyParts[i][3]) == 0) {
+            // allowed string, keep it
+            found = true;
+            break;
+          }
+        }
+        if (found)
+          continue;
+      }
+
       if (what == "replace") {
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), which, ds).c_str());
         continue;
