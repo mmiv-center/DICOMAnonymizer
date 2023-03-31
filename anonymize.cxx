@@ -1420,8 +1420,14 @@ void *ReadFilesThread(void *voidparams) {
         bool found = false;
         for (int b_idx = 0; b_idx < allowedBodyParts.size(); b_idx++) {
           // what is the current value in this tag?
-          fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), std::string(allowedBodyParts[b_idx][3]).c_str());
-          if (input_bodypart.compare(allowedBodyParts[b_idx][3]) == 0) {
+          // could we have a space at the end of input_bodypart?
+          std::string allowedBP = allowedBodyParts[b_idx][3];
+          if (allowedBP.size() % 2 == 1) { // we need even length strings for comparisson
+            allowedBP += " ";
+          }
+          fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBP.c_str());
+
+          if (input_bodypart.compare(allowedBP) == 0) {
             // allowed string, keep it
             found = true;
             break;
