@@ -2187,10 +2187,10 @@ int main(int argc, char *argv[]) {
             fs::path export_anon_filename = exportanonfilename;
             fprintf(stdout,
                     "Write the anonymization tag information as a file to disk "
-                    "and exit (\"%s\"). Extension is: \"%s\"\n",
-                    exportanonfilename.c_str(), export_anon_filename.extension().c_str());
+                    "and exit (\"%s\").\n",
+                    exportanonfilename.c_str());
             if (export_anon_filename.extension() == ".csv") {
-              std::ofstream csvfile(exportanonfilename);
+              std::ofstream csvfile(exportanonfilename, std::ios::binary);
               if (!csvfile.is_open()) {
                 fprintf(stderr, "Failed to open file \"%s\"\n", exportanonfilename.c_str());
               } else {
