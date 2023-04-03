@@ -42,7 +42,7 @@
 #include <stdio.h>
 #include <thread>
 
-#include <filesystem>
+#include <filesystem> // needs C++-17
 namespace fs = std::filesystem;
 
 struct threadparams {
@@ -2187,8 +2187,8 @@ int main(int argc, char *argv[]) {
             fs::path export_anon_filename = exportanonfilename;
             fprintf(stdout,
                     "Write the anonymization tag information as a file to disk "
-                    "and exit (\"%s\").\n",
-                    exportanonfilename.c_str());
+                    "and exit (\"%s\"). Extension is: \"%s\"\n",
+                    exportanonfilename.c_str(), export_anon_filename.extension().c_str());
             if (export_anon_filename.extension() == ".csv") {
               std::ofstream csvfile(exportanonfilename);
               if (!csvfile.is_open()) {
