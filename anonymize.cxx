@@ -2189,7 +2189,7 @@ int main(int argc, char *argv[]) {
                     "Write the anonymization tag information as a file to disk "
                     "and exit (\"%s\").\n",
                     exportanonfilename.c_str());
-            if (export_anon_filename.extension() == "csv") {
+            if (export_anon_filename.extension() == ".csv") {
               std::ofstream csvfile(exportanonfilename);
               if (!csvfile.is_open()) {
                 fprintf(stderr, "Failed to open file \"%s\"\n", exportanonfilename.c_str());

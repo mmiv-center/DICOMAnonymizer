@@ -28,7 +28,7 @@ The executable can be compiled or created inside a docker container. Here the in
 
 Clone this repository and:
 ```
-> docker build -t anonymizer .
+> docker build --no-cache -t anonymizer -f Dockerfile .
 > docker run --rm -it anonymizer
 USAGE: anonymize [options]
 
