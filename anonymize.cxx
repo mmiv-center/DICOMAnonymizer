@@ -1620,7 +1620,9 @@ void *ReadFilesThread(void *voidparams) {
     //        in the anonymized version of the data.
     //
     std::string anonStudyInstanceUID = sf.ToString(gdcm::Tag(0x0020, 0x000D));
-    anon.Replace(gdcm::Tag(0x0020, 0x0010), limitToMaxLength(gdcm::Tag(0x0020, 0x0010), anonStudyInstanceUID, ds).c_str());
+    // StudyID is 16 characters long and should be hashed if it exists
+    // std::string anonStudyID = sf.ToString(gdcm::Tag(0x0020, 0x0010));
+    // anon.Replace(gdcm::Tag(0x0020, 0x0010), limitToMaxLength(gdcm::Tag(0x0020, 0x0010), anonStudyID, ds).c_str());
 
     //{
     //  fprintf(stdout, "True studyInstanceUID is: %s\n", trueStudyInstanceUID.c_str());
@@ -2200,10 +2202,11 @@ int main(int argc, char *argv[]) {
                     max_length = work[i].size();
                 }
                 for (int i = 0; i < work.size(); i++) {
-                  for (int j = 0; j < max_length; j++) {
+                  for (int j = 0; j < max_length - 1; j++) {
                     if (work[i].size() > j) {
-                      csvfile << work[i][j] << ",";
-                    } else if (j < max_length - 1) {
+                      csvfile << work[i][j];
+                    }
+                    if (j < max_length - 2) {
                       csvfile << ",";
                     }
                   }
