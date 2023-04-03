@@ -1022,7 +1022,7 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
             if (bv != NULL) {
               std::string dup(bv->GetPointer(), bv->GetLength());
               std::string hash = SHA256::digestString(dup + params->projectname).toHex();
-	      std::string hash_limited = limitToMaxLength(aa, hash, *dss);
+              std::string hash_limited = limitToMaxLength(aa, hash, *dss);
               // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
               cm.SetByteValue(hash_limited.c_str(), (uint32_t)hash_limited.size());
               // cm.SetVLToUndefined();
@@ -1068,7 +1068,7 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
                 if (bv != NULL) {
                   std::string dup(bv->GetPointer(), bv->GetLength());
                   std::string hash = SHA256::digestString(dup + params->projectname).toHex();
-		  std::string hash_limited = limitToMaxLength(aa, hash, *dss);
+                  std::string hash_limited = limitToMaxLength(aa, hash, *dss);
                   // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
                   cm.SetByteValue(hash_limited.c_str(), (uint32_t)hash_limited.size());
                   // cm.SetVLToUndefined();
@@ -1201,9 +1201,9 @@ void *ReadFilesThread(void *voidparams) {
     for( ; cit != dss.GetDES().end(); ++cit) {
       std::stringstream strm;
       if (cit->GetTag() == gdcm::Tag(0x0020, 0x000d)) {
-	const gdcm::DataElement &de = (*cit);
-	(*cit).GetValue().Print(strm);
-	trueStudyInstanceUID = strm.str();
+        const gdcm::DataElement &de = (*cit);
+        (*cit).GetValue().Print(strm);
+        trueStudyInstanceUID = strm.str();
       }
     }
     
@@ -1640,16 +1640,16 @@ void *ReadFilesThread(void *voidparams) {
     anon.Remove(gdcm::Tag(0x0013, 0x1013));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1013), params->sitename.c_str())) {
       bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1013));
-//      if (!ok)
-//        fprintf(stderr, "failed setting tags 0013,1013 to empty.\n");
+      //      if (!ok)
+      //        fprintf(stderr, "failed setting tags 0013,1013 to empty.\n");
     }*/
     anon.Remove(gdcm::Tag(0x0013, 0x1011));
     anon.Remove(gdcm::Tag(0x0013, 0x1012));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1012), params->sitename.c_str())) {
       //fprintf(stderr, "Cannot set private tag 0013, 1012, try to set to 0\n");
       bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1012)); // could fail if the element does not exist
-//      if (!ok)
-//        fprintf(stderr, "failed setting tags 0013,1012 to empty.\n");
+      //      if (!ok)
+      //        fprintf(stderr, "failed setting tags 0013,1012 to empty.\n");
     } */
 
     // ok save the file again
@@ -2190,7 +2190,7 @@ int main(int argc, char *argv[]) {
                     "and exit (\"%s\").\n",
                     exportanonfilename.c_str());
             if (export_anon_filename.extension() == ".csv") {
-              std::ofstream csvfile(exportanonfilename, std::ios::binary);
+              std::ofstream csvfile(exportanonfilename);
               if (!csvfile.is_open()) {
                 fprintf(stderr, "Failed to open file \"%s\"\n", exportanonfilename.c_str());
               } else {
@@ -2206,8 +2206,8 @@ int main(int argc, char *argv[]) {
                     } else if (j < max_length - 1) {
                       csvfile << ",";
                     }
-                    csvfile << "\n";
                   }
+                  csvfile << "\n";
                 }
                 csvfile.flush();
               }
