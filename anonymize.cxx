@@ -2203,9 +2203,10 @@ int main(int argc, char *argv[]) {
                   for (int j = 0; j < max_length; j++) {
                     if (work[i].size() > j) {
                       csvfile << work[i][j] << ",";
-                    } else {
+                    } else if (j < max_length - 1) {
                       csvfile << ",";
                     }
+                    csvfile << "\n";
                   }
                 }
                 csvfile.flush();
