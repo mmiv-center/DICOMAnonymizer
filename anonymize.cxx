@@ -42,6 +42,9 @@
 #include <stdio.h>
 #include <thread>
 
+#include <filesystem>
+namespace fs = std::filesystem;
+
 struct threadparams {
   const char **filenames;
   size_t nfiles;
@@ -2181,16 +2184,40 @@ int main(int argc, char *argv[]) {
 
           // if we need to export the json file, do that and quit
           if (exportanonfilename.length() > 0) {
+            fs::path export_anon_filename = exportanonfilename;
             fprintf(stdout,
                     "Write the anonymization tag information as a file to disk "
                     "and exit (\"%s\").\n",
                     exportanonfilename.c_str());
-            std::ofstream jsonfile(exportanonfilename);
-            if (!jsonfile.is_open()) {
-              fprintf(stderr, "Failed to open file \"%s\"\n", exportanonfilename.c_str());
+            if (export_anon_filename.extension() == "csv") {
+              std::ofstream csvfile(exportanonfilename);
+              if (!csvfile.is_open()) {
+                fprintf(stderr, "Failed to open file \"%s\"\n", exportanonfilename.c_str());
+              } else {
+                int max_length = 0;
+                for (int i = 0; i < work.size(); i++) {
+                  if (max_length < work[i].size())
+                    max_length = work[i].size();
+                }
+                for (int i = 0; i < work.size(); i++) {
+                  for (int j = 0; j < max_length; j++) {
+                    if (work[i].size() > j) {
+                      csvfile << work[i][j] << ",";
+                    } else {
+                      csvfile << ",";
+                    }
+                  }
+                }
+                csvfile.flush();
+              }
             } else {
-              jsonfile << work;
-              jsonfile.flush();
+              std::ofstream jsonfile(exportanonfilename);
+              if (!jsonfile.is_open()) {
+                fprintf(stderr, "Failed to open file \"%s\"\n", exportanonfilename.c_str());
+              } else {
+                jsonfile << work;
+                jsonfile.flush();
+              }
             }
             exit(0);
           }

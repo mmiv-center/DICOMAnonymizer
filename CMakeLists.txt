@@ -8,7 +8,7 @@ IF("${CMAKE_SYSTEM}" MATCHES "Linux")
    SET(CMAKE_CXX_FLAGS "-std=c++17 -I/usr/local/include -I/usr/include")
 ELSE()
    # find the correct path for isysroot with `xcrun --show-sdk-path`
-   SET(CMAKE_CXX_FLAGS "-std=c++11 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
+   SET(CMAKE_CXX_FLAGS "-std=c++17 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
 ENDIF()
 
 FIND_LIBRARY(LIBXML2_LIBRARY NAMES xml2)
