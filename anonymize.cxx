@@ -1454,7 +1454,7 @@ void *ReadFilesThread(void *voidparams) {
       if (what == "hashuid+PROJECTNAME") {
         std::string val = sf.ToString(gdcm::Tag(a, b)); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
         //std::string hash = SHA256::digestString(val + params->projectname).toHex();
-	std::string hash = betterUID(val + params->projectname);
+        std::string hash = betterUID(val + params->projectname);
         if (which == "SOPInstanceUID") // keep a copy as the filename for the output
           filenamestring = hash.c_str();
 
@@ -1462,12 +1462,12 @@ void *ReadFilesThread(void *voidparams) {
           seriesdirname = hash.c_str();
 
         if (which == "StudyInstanceUID") {
-	  //fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
-	  if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
-	    val = trueStudyInstanceUID;
-	    //hash = SHA256::digestString(val + params->projectname).toHex();
-	    hash = betterUID(val + params->projectname);
-	  }
+          // fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
+          if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+            val = trueStudyInstanceUID;
+            // hash = SHA256::digestString(val + params->projectname).toHex();
+            hash = betterUID(val + params->projectname);
+          }
           // we want to keep a mapping of the old and new study instance uids
           params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
         }
@@ -1494,13 +1494,13 @@ void *ReadFilesThread(void *voidparams) {
           params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
         }
 
-	if (which == "StudyInstanceUID") {
-	  if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
-	    //fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
-	    val = trueStudyInstanceUID;
-	    hash = SHA256::digestString(val).toHex();
-	  }
-	}
+        if (which == "StudyInstanceUID") {
+          if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+            // fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
+            val = trueStudyInstanceUID;
+            hash = SHA256::digestString(val).toHex();
+          }
+        }
 
         anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
         continue;
@@ -1547,13 +1547,13 @@ void *ReadFilesThread(void *voidparams) {
         std::string val = sf.ToString(gdcm::Tag(a, b));
         // parse the date string YYYYMMDDHHMMSS
         struct sdate date1;
-	char t[248];
+        char t[248];
         if (sscanf(val.c_str(), "%04ld%02ld%02ld%s", &date1.y, &date1.m, &date1.d, t) == 4) {
           // replace with added value
           long c = gday(date1) + nd;
           struct sdate date2 = dtf(c);
           char dat[256];
-	  // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+          // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
           snprintf(dat, 256, "%04ld%02ld%02ld%s", date2.y, date2.m, date2.d, t);
           // fprintf(stdout, "found a date : %s, replace with date: %s\n",
           // val.c_str(), dat);
@@ -1565,8 +1565,8 @@ void *ReadFilesThread(void *voidparams) {
           // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
           // which.c_str(), filename);
 
-	  // TODO: We should try harder here. The day and month might be missing components
-	  // and we still have a DT field that is valid (null components).
+          // TODO: We should try harder here. The day and month might be missing components
+          // and we still have a DT field that is valid (null components).
           anon.Replace(gdcm::Tag(a, b), "");
         }
         continue;
