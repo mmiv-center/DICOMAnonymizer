@@ -1992,7 +1992,7 @@ std::vector<std::string> listFiles(const std::string &path) {
     if (fs::is_regular_file(dirEntry.path())) {
       files.push_back(dirEntry.path());
       if (files.size() % 100 == 0)
-        fprintf(stdout, "\rreading files (%lu) ...", files.size());
+        fprintf(stdout, "\rreading files (%'lu) ...", files.size());
         fflush(stdout);
     }
   }
@@ -2001,6 +2001,7 @@ std::vector<std::string> listFiles(const std::string &path) {
 
 int main(int argc, char *argv[]) {
 
+  setlocale(LC_NUMERIC, "");
   argc -= (argc > 0);
   argv += (argc > 0); // skip program name argv[0] if present
 
