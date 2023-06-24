@@ -1253,6 +1253,7 @@ void *ReadFilesThread(void *voidparams) {
         const gdcm::DataElement &de = (*cit);
         (*cit).GetValue().Print(strm);
         trueStudyInstanceUID = strm.str();
+        break;
       }
     }
     
@@ -1311,6 +1312,8 @@ void *ReadFilesThread(void *voidparams) {
       int a = strtol(tag1.c_str(), NULL, 16);
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stderr, "Looking for %s, ", which.c_str());
+
+      // if 'a' is a private tag we need to use gdcm::PrivateTag(a,b) here!
       if (!ds.FindDataElement(gdcm::Tag(a, b))) {
 
         // if the inserted element is a sequence we need to do more
@@ -1369,9 +1372,10 @@ void *ReadFilesThread(void *voidparams) {
           } catch (const std::exception &ex) {
             std::cout << "Caught exception \"" << ex.what() << "\"\n";
           }
-          size_t len = 0;
-          char *buf = new char[len];
-          elem.SetByteValue(buf, (uint32_t)len);
+          //size_t len = 0;
+          //char *buf = new char[len];
+          std::string empty("");
+          elem.SetByteValue(empty.c_str(), (uint32_t)empty.size());
           ds.Insert(elem);
         }
       }
@@ -1420,76 +1424,86 @@ void *ReadFilesThread(void *voidparams) {
       if (work[i].size() > 4 && work[i][4] == "regexp") {
         regexp = true;
         // as a test print out what we got
-        std::string val = sf.ToString(gdcm::Tag(a, b));
-        std::string ns("");
-        try {
-          std::regex re(what);
-          std::smatch match;
-          if (std::regex_search(val, match, re) && match.size() > 1) {
-            for (int j = 1; j < match.size(); j++) {
-              ns += match.str(j) + std::string(" ");
+        if (ds.FindDataElement(gdcm::Tag(a, b))) {
+          std::string val = sf.ToString(gdcm::Tag(a, b));
+          std::string ns("");
+          try {
+            std::regex re(what);
+            std::smatch match;
+            if (std::regex_search(val, match, re) && match.size() > 1) {
+              for (int j = 1; j < match.size(); j++) {
+                ns += match.str(j) + std::string(" ");
+              }
+            } else {
+              ns = std::string("FIONA: no match on regular expression");
             }
-          } else {
-            ns = std::string("FIONA: no match on regular expression");
+          } catch (std::regex_error &e) {
+            fprintf(stdout, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
+                    what.c_str(), val.c_str(), ns.c_str());
           }
-        } catch (std::regex_error &e) {
-          fprintf(stdout, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
-                  what.c_str(), val.c_str(), ns.c_str());
+          // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
+          // ns.c_str());
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), ns, ds).c_str());
         }
-        // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
-        // ns.c_str());
-	
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), ns, ds).c_str());
         continue;
       }
       if (which == "BlockOwner" && what != "replace") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
         continue;
       }
       if (which == "ProjectName" || which == "PROJECTNAME") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
         continue;
       }
       if (which == "PatientID" || which == "PATIENTID") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
         continue;
       }
       if (what == "ProjectName" || what == "PROJECTNAME") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->projectname, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->projectname, ds).c_str());
         continue;
       }
       if (what == "PatientID" || what == "PATIENTID") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
         continue;
       }
       if (what == "EventName" || what == "EVENTNAME") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->eventname, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->eventname, ds).c_str());
         continue;
       }
       if (which == "BodyPartExamined" && what == "BODYPART") {
         // allow all allowedBodyParts, or set to BODYPART
-        std::string input_bodypart = sf.ToString(gdcm::Tag(a, b));
-        bool found = false;
-        for (int b_idx = 0; b_idx < allowedBodyParts.size(); b_idx++) {
-          // what is the current value in this tag?
-          // could we have a space at the end of input_bodypart?
-          std::string allowedBP = allowedBodyParts[b_idx][3];
-          if (allowedBP.size() % 2 == 1) { // we need even length strings for comparisson
-            allowedBP += " ";
+        if (ds.FindDataElement(gdcm::Tag(a, b))) {
+          std::string input_bodypart = sf.ToString(gdcm::Tag(a, b));
+          bool found = false;
+          for (int b_idx = 0; b_idx < allowedBodyParts.size(); b_idx++) {
+            // what is the current value in this tag?
+            // could we have a space at the end of input_bodypart?
+            std::string allowedBP = allowedBodyParts[b_idx][3];
+            if (allowedBP.size() % 2 == 1) { // we need even length strings for comparisson
+              allowedBP += " ";
+            }
+            // fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBP.c_str());
+            if (input_bodypart.compare(allowedBP) == 0) {
+              // allowed string, keep it
+              found = true;
+              break;
+            }
           }
-          // fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBP.c_str());
-          if (input_bodypart.compare(allowedBP) == 0) {
-            // allowed string, keep it
-            found = true;
-            break;
-          }
+          if (found)
+            continue;
         }
-        if (found)
-          continue;
       }
 
       if (what == "replace") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), which, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), which, ds).c_str());
         continue;
       }
       if (what == "remove") {
@@ -1501,162 +1515,180 @@ void *ReadFilesThread(void *voidparams) {
         continue;
       }
       if (what == "hashuid+PROJECTNAME") {
-        std::string val = sf.ToString(gdcm::Tag(a, b)); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
-        //std::string hash = SHA256::digestString(val + params->projectname).toHex();
-        std::string hash = betterUID(val + params->projectname);
-        if (which == "SOPInstanceUID") // keep a copy as the filename for the output
-          filenamestring = hash.c_str();
+        if (ds.FindDataElement(gdcm::Tag(a, b))) {
+          std::string val = sf.ToString(gdcm::Tag(a, b)); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
+          //std::string hash = SHA256::digestString(val + params->projectname).toHex();
+          std::string hash = betterUID(val + params->projectname);
+          if (which == "SOPInstanceUID") // keep a copy as the filename for the output
+            filenamestring = hash.c_str();
 
-        if (which == "SeriesInstanceUID")
-          seriesdirname = hash.c_str();
+          if (which == "SeriesInstanceUID")
+            seriesdirname = hash.c_str();
 
-        if (which == "StudyInstanceUID") {
-          // fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
-          if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
-            val = trueStudyInstanceUID;
-            // hash = SHA256::digestString(val + params->projectname).toHex();
-            hash = betterUID(val + params->projectname);
+          if (which == "StudyInstanceUID") {
+            // fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
+            if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+              val = trueStudyInstanceUID;
+              // hash = SHA256::digestString(val + params->projectname).toHex();
+              hash = betterUID(val + params->projectname);
+            }
+            // we want to keep a mapping of the old and new study instance uids
+            params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
           }
-          // we want to keep a mapping of the old and new study instance uids
-          params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
-        }
-        if (which == "SeriesInstanceUID") {
-          // we want to keep a mapping of the old and new study instance uids
-          params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
-        }
+          if (which == "SeriesInstanceUID") {
+            // we want to keep a mapping of the old and new study instance uids
+            params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+          }
 
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
-        // this does not replace elements inside sequences
-        continue;
+          //if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
+          // this does not replace elements inside sequences
+          continue;
+        }
       }
       if (what == "hashuid" || what == "hash") {
-        std::string val = sf.ToString(gdcm::Tag(a, b));
-        std::string hash = SHA256::digestString(val).toHex();
-        if (which == "SOPInstanceUID") // keep a copy as the filename for the output
-          filenamestring = hash.c_str();
+        if (ds.FindDataElement(gdcm::Tag(a, b))) {
+          std::string val = sf.ToString(gdcm::Tag(a, b));
+          std::string hash = SHA256::digestString(val).toHex();
+          if (which == "SOPInstanceUID") // keep a copy as the filename for the output
+            filenamestring = hash.c_str();
 
-        if (which == "SeriesInstanceUID")
-          seriesdirname = hash.c_str();
+          if (which == "SeriesInstanceUID")
+            seriesdirname = hash.c_str();
 
-        if (which == "SeriesInstanceUID") {
-          // we want to keep a mapping of the old and new study instance uids
-          params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
-        }
-
-        if (which == "StudyInstanceUID") {
-          if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
-            // fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
-            val = trueStudyInstanceUID;
-            hash = SHA256::digestString(val).toHex();
+          if (which == "SeriesInstanceUID") {
+            // we want to keep a mapping of the old and new study instance uids
+            params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
           }
-        }
 
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
-        continue;
+          if (which == "StudyInstanceUID") {
+            if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+              // fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
+              val = trueStudyInstanceUID;
+              hash = SHA256::digestString(val).toHex();
+            }
+          }
+
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
+          continue;
+        }
       }
       if (what == "keep") {
         // so we do nothing...
         continue;
       }
       if (what == "incrementdate") {
-        int nd = params->dateincrement;
-        std::string val = sf.ToString(gdcm::Tag(a, b));
-        // parse the date string YYYYMMDD
-        struct sdate date1;
-        if (sscanf(val.c_str(), "%04ld%02ld%02ld", &date1.y, &date1.m, &date1.d) == 3) {
-          // replace with added value
-          long c = gday(date1) + nd;
-          struct sdate date2 = dtf(c);
-          char dat[256];
-          snprintf(dat, 256, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
-          // fprintf(stdout, "found a date : %s, replace with date: %s\n",
-          // val.c_str(), dat);
+        if (ds.FindDataElement(gdcm::Tag(a, b))) {
+          int nd = params->dateincrement;
+          std::string val = sf.ToString(gdcm::Tag(a, b));
+          // parse the date string YYYYMMDD
+          struct sdate date1;
+          if (sscanf(val.c_str(), "%04ld%02ld%02ld", &date1.y, &date1.m, &date1.d) == 3) {
+            // replace with added value
+            long c = gday(date1) + nd;
+            struct sdate date2 = dtf(c);
+            char dat[256];
+            snprintf(dat, 256, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
+            // fprintf(stdout, "found a date : %s, replace with date: %s\n",
+            // val.c_str(), dat);
+            anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), std::string(dat), ds).c_str());
+          } else {
+            // could not read the date here, just remove instead
+            // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
+            // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
+            // which.c_str(), filename);
 
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), std::string(dat), ds).c_str());
-        } else {
-          // could not read the date here, just remove instead
-          // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
-          // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
-          // which.c_str(), filename);
-
-          // The issue with empty dates is that we cannot get those back from the research PACS, we should instead use some
-          // default dates to cover these cases. What is a good date range for this? Like any date in a specific year?
-          std::string fixed_year("1970");
-          int variable_month = (rand() % 12) + 1;
-          int day = 1;
-          char dat[256];
-          snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
-          // fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
-          anon.Replace(gdcm::Tag(a, b), dat);
+            // The issue with empty dates is that we cannot get those back from the research PACS, we should instead use some
+            // default dates to cover these cases. What is a good date range for this? Like any date in a specific year?
+            std::string fixed_year("1970");
+            int variable_month = (rand() % 12) + 1;
+            int day = 1;
+            char dat[256];
+            snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
+            // fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
+            anon.Replace(gdcm::Tag(a, b), dat);
+          }
+          continue;
         }
-        continue;
       }
       if (what == "incrementdatetime") {
-        int nd = params->dateincrement;
-        std::string val = sf.ToString(gdcm::Tag(a, b));
-        // parse the date string YYYYMMDDHHMMSS
-        struct sdate date1;
-        char t[248];
-        if (sscanf(val.c_str(), "%04ld%02ld%02ld%s", &date1.y, &date1.m, &date1.d, t) == 4) {
-          // replace with added value
-          long c = gday(date1) + nd;
-          struct sdate date2 = dtf(c);
-          char dat[256];
-          // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
-          snprintf(dat, 256, "%04ld%02ld%02ld%s", date2.y, date2.m, date2.d, t);
-          // fprintf(stdout, "found a date : %s, replace with date: %s\n",
-          // val.c_str(), dat);
-	  
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), std::string(dat), ds).c_str());
-        } else {
-          // could not read the date here, just remove instead
-          // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
-          // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
-          // which.c_str(), filename);
+        if (ds.FindDataElement(gdcm::Tag(a, b))) {
+          int nd = params->dateincrement;
+          std::string val = sf.ToString(gdcm::Tag(a, b));
+          // parse the date string YYYYMMDDHHMMSS
+          struct sdate date1;
+          char t[248];
+          if (sscanf(val.c_str(), "%04ld%02ld%02ld%s", &date1.y, &date1.m, &date1.d, t) == 4) {
+            // replace with added value
+            long c = gday(date1) + nd;
+            struct sdate date2 = dtf(c);
+            char dat[256];
+            // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+            snprintf(dat, 256, "%04ld%02ld%02ld%s", date2.y, date2.m, date2.d, t);
+            // fprintf(stdout, "found a date : %s, replace with date: %s\n",
+            // val.c_str(), dat);      
+            anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), std::string(dat), ds).c_str());
+          } else {
+            // could not read the date here, just remove instead
+            // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
+            // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
+            // which.c_str(), filename);
 
-          // TODO: We should try harder here. The day and month might be missing components
-          // and we still have a DT field that is valid (null components).
-          anon.Replace(gdcm::Tag(a, b), "");
+            // TODO: We should try harder here. The day and month might be missing components
+            // and we still have a DT field that is valid (null components).
+            anon.Replace(gdcm::Tag(a, b), "");
+          }
+          continue;
         }
-        continue;
       }
       if (what == "YES") {
-        anon.Replace(gdcm::Tag(a, b), "YES");
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), "YES");
         continue;
       }
       if (what == "MODIFIED") {
-        anon.Replace(gdcm::Tag(a, b), "MODIFIED");
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), "MODIFIED");
         continue;
       }
       if (what == "PROJECTNAME") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
         continue;
       }
       if (what == "SITENAME") {
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->sitename, ds).c_str());
+        if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->sitename, ds).c_str());
         continue;
       }
       // Some entries have Re-Mapped, that could be a name on the command line or,
       // by default we should hash the id
       // fprintf(stdout, "Warning: set to what: %s %s which: %s what: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str());
       // fallback, if everything fails we just use the which and set that's field value
-      anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
+      if (ds.FindDataElement(gdcm::Tag(a, b)))
+        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
     }
 
     // hash of the patient id
     if (params->patientid == "hashuid") {
-      std::string val = sf.ToString(gdcm::Tag(0x0010, 0x0010));
-      std::string hash = SHA256::digestString(val).toHex();
-      anon.Replace(gdcm::Tag(0x0010, 0x0010), limitToMaxLength(gdcm::Tag(0x0010, 0x0010), hash, ds).c_str());
+      if (ds.FindDataElement(gdcm::Tag(0x0010, 0x0010))) {
+        std::string val = sf.ToString(gdcm::Tag(0x0010, 0x0010));
+        std::string hash = SHA256::digestString(val).toHex();
+        anon.Replace(gdcm::Tag(0x0010, 0x0010), limitToMaxLength(gdcm::Tag(0x0010, 0x0010), hash, ds).c_str());
+      }
     } else {
-      anon.Replace(gdcm::Tag(0x0010, 0x0010), limitToMaxLength(gdcm::Tag(0x0010, 0x0010), params->patientid, ds).c_str());
+      if (ds.FindDataElement(gdcm::Tag(0x0010, 0x0010)))
+        anon.Replace(gdcm::Tag(0x0010, 0x0010), limitToMaxLength(gdcm::Tag(0x0010, 0x0010), params->patientid, ds).c_str());
     }
     if (params->patientid == "hashuid") {
-      std::string val = sf.ToString(gdcm::Tag(0x0010, 0x0020));
-      std::string hash = SHA256::digestString(val).toHex();
-      anon.Replace(gdcm::Tag(0x0010, 0x0020), limitToMaxLength(gdcm::Tag(0x0010, 0x0020), hash, ds).c_str());
+      if (ds.FindDataElement(gdcm::Tag(0x0010, 0x0020))) {
+        std::string val = sf.ToString(gdcm::Tag(0x0010, 0x0020));
+        std::string hash = SHA256::digestString(val).toHex();
+        anon.Replace(gdcm::Tag(0x0010, 0x0020), limitToMaxLength(gdcm::Tag(0x0010, 0x0020), hash, ds).c_str());
+      }
     } else {
-      anon.Replace(gdcm::Tag(0x0010, 0x0020), limitToMaxLength(gdcm::Tag(0x0010, 0x0020), params->patientid, ds).c_str());
+      if (ds.FindDataElement(gdcm::Tag(0x0010, 0x0020)))
+        anon.Replace(gdcm::Tag(0x0010, 0x0020), limitToMaxLength(gdcm::Tag(0x0010, 0x0020), params->patientid, ds).c_str());
     }
 
     // We store the computed StudyInstanceUID in the StudyID tag.
@@ -1680,7 +1712,8 @@ void *ReadFilesThread(void *voidparams) {
     
     // fprintf(stdout, "project name is: %s\n", params->projectname.c_str());
     // this is a private tag --- does not work yet - we can only remove
-    anon.Remove(gdcm::Tag(0x0013, 0x1010));
+    if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1010)))
+      anon.Remove(gdcm::Tag(0x0013, 0x1010));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1010), params->projectname.c_str())) {
       gdcm::Trace::SetDebug( true );
       gdcm::Trace::SetWarning( true );
@@ -1688,14 +1721,17 @@ void *ReadFilesThread(void *voidparams) {
                                                        //      if (!ok)
                                                        //        fprintf(stderr, "failed setting tags 0013,1010 to empty.\n");
     }*/
-    anon.Remove(gdcm::Tag(0x0013, 0x1013));
+    if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1013)))
+      anon.Remove(gdcm::Tag(0x0013, 0x1013));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1013), params->sitename.c_str())) {
       bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1013));
       //      if (!ok)
       //        fprintf(stderr, "failed setting tags 0013,1013 to empty.\n");
     }*/
-    anon.Remove(gdcm::Tag(0x0013, 0x1011));
-    anon.Remove(gdcm::Tag(0x0013, 0x1012));
+    if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1011)))
+      anon.Remove(gdcm::Tag(0x0013, 0x1011));
+    if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1012)))
+      anon.Remove(gdcm::Tag(0x0013, 0x1012));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1012), params->sitename.c_str())) {
       //fprintf(stderr, "Cannot set private tag 0013, 1012, try to set to 0\n");
       bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1012)); // could fail if the element does not exist
@@ -1947,38 +1983,18 @@ const option::Descriptor usage[] = {
      "  anonymize --help\n"},
     {0, 0, 0, 0, 0, 0}};
 
-// get all files in all sub-directories, does some recursive calls so it might take a while
 // TODO: would be good to start anonymizing already while its still trying to find more files...
-std::vector<std::string> listFiles(const std::string &path, std::vector<std::string> files) {
-  if (auto dir = opendir(path.c_str())) {
-    while (auto f = readdir(dir)) {
-      // check for '.' and '..', but allow other names that start with a dot
-      if (((strlen(f->d_name) == 1) && (f->d_name[0] == '.')) || ((strlen(f->d_name) == 2) && (f->d_name[0] == '.') && (f->d_name[1] == '.')))
-        continue;
-      //fprintf(stdout, "entry is: %s file is %d==%d\n", f->d_name, f->d_type, DT_REG);
-      
-      if (f->d_type == DT_DIR) {
-	//fprintf(stdout, "enter directory %s\n", (path + "/" + f->d_name + "/").c_str());
-        std::vector<std::string> ff = listFiles(path + "/" + f->d_name + "/", files);
-        // append the returned files to files
-        for (int i = 0; i < ff.size(); i++) {
-          // problem is that we add files here several times if we don't check first.. don't understand why
-          if (std::find(files.begin(), files.end(), ff[i]) == files.end()) {
-	    //fprintf(stdout, "ADD FILE %s", ff[i].c_str());
-            files.push_back(ff[i]);
-	  }
-        }
-      }
-
-      if (f->d_type == DT_REG || f->d_type == DT_LNK) {
-	//fprintf(stdout, "FOUND a normal file (or a symbolic link): %s\n", ( path + "/" + f->d_name).c_str());
-        // cb(path + f->d_name);
-        if (std::find(files.begin(), files.end(), path + "/" + f->d_name) == files.end())
-          //fprintf(stdout, "ADD FILE %s", (path + "/" + f->d_name).c_str());
-          files.push_back(path + "/" + f->d_name);
-      }
+std::vector<std::string> listFiles(const std::string &path) {
+  std::vector<std::string> files;
+  using recursive_directory_iterator = std::filesystem::recursive_directory_iterator;
+  for (const auto& dirEntry : recursive_directory_iterator(path)) {
+    //std::cout << dirEntry << std::endl;
+    if (fs::is_regular_file(dirEntry.path())) {
+      files.push_back(dirEntry.path());
+      if (files.size() % 100 == 0)
+        fprintf(stdout, "\rreading files (%lu) ...", files.size());
+        fflush(stdout);
     }
-    closedir(dir);
   }
   return files;
 }
@@ -2044,10 +2060,16 @@ int main(int argc, char *argv[]) {
           fprintf(stdout, "--output needs a directory specified\n");
           exit(-1);
         }
-        // System::FileIsDirectory
+        // check output directory, exists and is_dir, if not exist create
         if (!gdcm::System::FileExists(output.c_str())) {
           // create the directory
           mkdir(output.c_str(), 0777);
+          if (gdcm::System::FileIsDirectory(output.c_str())) {
+            fprintf(stdout, "--output created directory \"%s\"\n", output.c_str());
+          } else {
+            fprintf(stderr, "Error: could not create directory \"%s\"\n", output.c_str());
+            exit(-1);
+          }
         }
         if (!gdcm::System::FileIsDirectory(output.c_str())) {
           fprintf(stdout, "--output should be a directory, not a file\n");
@@ -2297,8 +2319,7 @@ int main(int argc, char *argv[]) {
 
   // Check if user pass in a single directory
   if (gdcm::System::FileIsDirectory(input.c_str())) {
-    std::vector<std::string> files;
-    files = listFiles(input.c_str(), files);
+    std::vector<std::string> files = listFiles(input.c_str());
 
     const size_t nfiles = files.size();
     const char **filenames = new const char *[nfiles];
