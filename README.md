@@ -65,6 +65,26 @@ Examples:
   anonymize --help		
 ```
 
+We use cmake to build inside the container (debug build):
+
+```
+cmake -DCMAKE_BUILD_TYPE=Debug .
+```
+
+If you get an error about docbook and xsl/xml processing you may remove the generation of man pages:
+
+```
+cmake -DCMAKE_BUILD_TYPE=Debug -DGDCM_BUILD_DOCBOOK_MANPAGES:BOOL=OFF ../GDCM-3.0.20
+```
+
+Actually its better to keep the man pages build because they are needed later. If you get the error instead set the following environment variable
+
+```
+export XML_CATALOG_FILES="/opt/homebrew/etc/xml/catalog"
+```
+
+and 'make'.
+
 ## Run
 
 If the data is stored in a directory 'data' underneath the current directory this call would anonymize all

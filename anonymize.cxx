@@ -888,7 +888,56 @@ nlohmann::json work = nlohmann::json::array({
     {"0009", "1002", "SectraIdentExaminationID", "remove"}, // if 0009,0010 is SECTRA_Ident_01
 });
 
-std::string limitToMaxLength(gdcm::Tag t, std::string str_in, gdcm::DataSet &ds) {
+std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm::DataSet& ds) {
+  const gdcm::DataElement& de = ds.GetDataElement(t);
+  gdcm::VR vr = de.GetVR();
+  std::string VRName = gdcm::VR::GetVRString(vr);
+
+  if (VRName == "??") // don't know, do nothing
+    return str_in;
+
+  std::unordered_map<std::string, uint32_t> max_lengths = {
+    {"AE", 16},
+    {"AS", 4},
+    {"AT", 4},
+    {"CS", 16},
+    {"DA", 8},
+    {"DS", 16},
+    {"DT", 26},
+    {"FL", 4},
+    {"FD", 8},
+    {"IS", 12},
+    {"LO", 64},
+    {"LT", 10240},
+    {"SH", 16},
+    {"SL", 4},
+    {"SS", 2},
+    {"ST", 1024},
+    {"TM", 16},
+    {"UI", 64},
+    {"UL", 4},
+    {"US", 2}
+  };
+
+  auto max_length_it = max_lengths.find(VRName);
+  if (max_length_it == max_lengths.end())
+    return str_in; // do nothing
+
+  uint32_t max_l = max_length_it->second;
+  if (max_l == 0)
+    return str_in; // should never happen
+
+  if (str_in.length() > max_l) {
+    std::string str_limited = str_in.substr(0, max_l);
+    fprintf(stderr, "Warning: tag value too long (%zu), max: %u for VR: %s, will be truncated.\n",
+            str_in.length(), max_l, gdcm::VR::GetVRString(vr));
+    return str_limited;
+  }
+
+  return str_in;
+}
+
+/*std::string limitToMaxLength(gdcm::Tag t, std::string str_in, gdcm::DataSet &ds) {
   // what is the value representation?
   const gdcm::DataElement& de = ds.GetDataElement( t );
   gdcm::VR vr = de.GetVR();
@@ -950,7 +999,7 @@ std::string limitToMaxLength(gdcm::Tag t, std::string str_in, gdcm::DataSet &ds)
   }
   // no change
   return str_in;
-}
+}*/
 
 // anonymizes only two levels in a sequence
 void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqur) {
@@ -1164,7 +1213,7 @@ std::string betterUID(std::string val) {
   //SHA256::digest a = SHA256::digestString(val);
   //std::string hash = toDec(a.data, a.size);
   std::string phash = prefix + "." + hash;
-  return phash.substr(0,63); // bummer: this truncates our hash value
+  return phash.substr(0,63); // bummer: this truncates our hash value, should be 64
 }
 
 void *ReadFilesThread(void *voidparams) {
@@ -1377,8 +1426,8 @@ void *ReadFilesThread(void *voidparams) {
           std::regex re(what);
           std::smatch match;
           if (std::regex_search(val, match, re) && match.size() > 1) {
-            for (int i = 1; i < match.size(); i++) {
-              ns += match.str(i) + std::string(" ");
+            for (int j = 1; j < match.size(); j++) {
+              ns += match.str(j) + std::string(" ");
             }
           } else {
             ns = std::string("FIONA: no match on regular expression");
@@ -1995,6 +2044,15 @@ int main(int argc, char *argv[]) {
           fprintf(stdout, "--output needs a directory specified\n");
           exit(-1);
         }
+        // System::FileIsDirectory
+        if (!gdcm::System::FileExists(output.c_str())) {
+          // create the directory
+          mkdir(output.c_str(), 0777);
+        }
+        if (!gdcm::System::FileIsDirectory(output.c_str())) {
+          fprintf(stdout, "--output should be a directory, not a file\n");
+          exit(-1);
+        }
         break;
       case PATIENTID:
         if (opt.arg) {
@@ -2085,17 +2143,17 @@ int main(int argc, char *argv[]) {
           int b = strtol(tag2.c_str(), NULL, 16); // did this work? we should check here and not just add
           // now check in work if we add or replace this rule
           bool found = false;
-          for (int i = 0; i < work.size(); i++) {
+          for (int j = 0; j < work.size(); j++) {
             // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
-            std::string ttag1(work[i][0]);
-            std::string ttag2(work[i][1]);
-            std::string twhich(work[i][2]);
+            std::string ttag1(work[j][0]);
+            std::string ttag2(work[j][1]);
+            std::string twhich(work[j][2]);
             if (tag1 == ttag1 && tag2 == ttag2) {
               // found and overwrite
               found = true;
-              work[i][3] = res; // overwrite the value, [2] is name
-              work[i][4] = std::string("");
-              work[i][5] = std::string("createIfMissing");
+              work[j][3] = res; // overwrite the value, [2] is name
+              work[j][4] = std::string("");
+              work[j][5] = std::string("createIfMissing");
             }
           }
           if (!found) {
@@ -2141,17 +2199,17 @@ int main(int argc, char *argv[]) {
           int b = strtol(tag2.c_str(), NULL, 16); // did this work? we should check here and not just add
           // now check in work if we add or replace this rule
           bool found = false;
-          for (int i = 0; i < work.size(); i++) {
+          for (int j = 0; j < work.size(); j++) {
             // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
-            std::string ttag1(work[i][0]);
-            std::string ttag2(work[i][1]);
-            std::string twhich(work[i][2]);
+            std::string ttag1(work[j][0]);
+            std::string ttag2(work[j][1]);
+            std::string twhich(work[j][2]);
             if (tag1 == ttag1 && tag2 == ttag2) {
               // found and overwrite
               found = true;
-              work[i][3] = res;      // overwrite the value, [2] is name
-              work[i][4] = "regexp"; // mark this as a regular expression tag change
-              work[i][5] = "createIfMissing"; // mark as imported from command line - needs to be written even if missing
+              work[j][3] = res;      // overwrite the value, [2] is name
+              work[j][4] = "regexp"; // mark this as a regular expression tag change
+              work[j][5] = "createIfMissing"; // mark as imported from command line - needs to be written even if missing
             }
           }
           if (!found) {
@@ -2197,14 +2255,14 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "Failed to open file \"%s\"\n", exportanonfilename.c_str());
               } else {
                 int max_length = 0;
-                for (int i = 0; i < work.size(); i++) {
-                  if (max_length < work[i].size())
-                    max_length = work[i].size();
+                for (int j = 0; j < work.size(); j++) {
+                  if (max_length < work[j].size())
+                    max_length = work[j].size();
                 }
-                for (int i = 0; i < work.size(); i++) {
+                for (int k = 0; k < work.size(); k++) {
                   for (int j = 0; j < max_length - 1; j++) {
-                    if (work[i].size() > j) {
-                      csvfile << work[i][j];
+                    if (work[k].size() > j) {
+                      csvfile << work[k][j];
                     }
                     if (j < max_length - 2) {
                       csvfile << ",";
