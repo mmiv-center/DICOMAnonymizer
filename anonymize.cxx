@@ -37,6 +37,7 @@
 
 #include <chrono>
 #include <map>
+#include <unordered_set>
 #include <pthread.h>
 #include <regex>
 #include <stdio.h>
@@ -868,24 +869,24 @@ nlohmann::json work = nlohmann::json::array({
     {"4000", "4000", "TextComments", "remove"},
     {"2030", "0020", "TextString", "remove"},
     {"0008", "0201", "TimezoneOffsetFromUTC", "remove"},
-    {"0088", "0910", "TopicAuthor", "remove"},
-    {"0088", "0912", "TopicKeyWords", "remove"},
-    {"0088", "0906", "TopicSubject", "remove"},
-    {"0088", "0904", "TopicTitle", "remove"},
-    {"0008", "1195", "TransactionUID", "hashuid"},
-    {"0013", "1011", "TrialName", "PROJECTNAME"},
-    {"0040", "a124", "UID", "hashuid"},
+    {"0088", "0910", "TopicAuthor",                       "remove"},
+    {"0088", "0912", "TopicKeyWords",                       "remove"},
+    {"0088", "0906", "TopicSubject",                        "remove"},
+    {"0088", "0904", "TopicTitle",                          "remove"},
+    {"0008", "1195", "TransactionUID",                      "hashuid"},
+    {"0013", "1011", "TrialName",                           "PROJECTNAME"},
+    {"0040", "a124", "UID",                                 "hashuid"},
     {"0040", "a088", "VerifyingObserverIdentificationCodeSeq", "remove"},
-    {"0040", "a075", "VerifyingObserverName", "empty"},
-    {"0040", "a073", "VerifyingObserverSequence", "remove"},
-    {"0040", "a027", "VerifyingOrganization", "remove"},
-    {"0038", "4000", "VisitComments", "keep"},
-    {"0033", "1013", "SomeSiemensMITRA", "remove"},
-    {"0033", "1016", "SomeSiemensMITRA", "remove"},
-    {"0033", "1019", "SomeSiemensMITRA", "remove"},
-    {"0033", "101c", "SomeSiemensMITRA", "remove"},
-    {"0009", "1001", "SectraIdentRequestID", "remove"},     // if 0009,0010 is SECTRA_Ident_01
-    {"0009", "1002", "SectraIdentExaminationID", "remove"}, // if 0009,0010 is SECTRA_Ident_01
+    {"0040", "a075", "VerifyingObserverName",               "empty"},
+    {"0040", "a073", "VerifyingObserverSequence",           "remove"},
+    {"0040", "a027", "VerifyingOrganization",               "remove"},
+    {"0038", "4000", "VisitComments",                       "keep"},
+    {"0033", "1013", "SomeSiemensMITRA",                    "remove"},
+    {"0033", "1016", "SomeSiemensMITRA",                    "remove"},
+    {"0033", "1019", "SomeSiemensMITRA",                    "remove"},
+    {"0033", "101c", "SomeSiemensMITRA",                    "remove"},
+    {"0009", "1001", "SectraIdentRequestID",                "remove"},     // if 0009,0010 is SECTRA_Ident_01
+    {"0009", "1002", "SectraIdentExaminationID",            "remove"}, // if 0009,0010 is SECTRA_Ident_01
 });
 
 std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm::DataSet& ds) {
@@ -1063,6 +1064,9 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
           if (tt.GetGroup() != a || tt.GetElement() != b) {
             continue;
           }
+          if (aa.IsPrivate()) {
+            aa = gdcm::PrivateTag(a,b);
+          }
           // fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
           if (nestedds.FindDataElement(tt)) {
             const gdcm::DataElement &de = nestedds.GetDataElement(tt);
@@ -1107,6 +1111,9 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
               int a = strtol(tag1.c_str(), NULL, 16);
               int b = strtol(tag2.c_str(), NULL, 16);
               gdcm::Tag aa(a, b); // now works
+              if (aa.IsPrivate()) {
+                aa = gdcm::PrivateTag(a,b);
+              }
 
               // REPLACE
               // gdcm::Tag tcm(0x0008,0x1155);
@@ -1216,6 +1223,15 @@ std::string betterUID(std::string val) {
   return phash.substr(0,63); // bummer: this truncates our hash value, should be 64
 }
 
+/*std::string getStringValue(gdcm::Tag t, gdcm::StringFilter *sf) {
+  // try a StringFilter if we have the right value representation
+  gdcm::VR vr = DataSetHelper::ComputeVR(sf->GetFile(), ds, t);
+
+  std::unordered_set<std::string> valids = { "AT", "FL", "FD", "OF", "SL", "SS", "UL", "US", "UT" };
+  if (auto iter = valids.find(vr); iter != valids.end())
+    return sf->ToString(t);
+}*/
+
 void *ReadFilesThread(void *voidparams) {
   threadparams *params = static_cast<threadparams *>(voidparams);
 
@@ -1312,9 +1328,14 @@ void *ReadFilesThread(void *voidparams) {
       int a = strtol(tag1.c_str(), NULL, 16);
       int b = strtol(tag2.c_str(), NULL, 16);
       // fprintf(stderr, "Looking for %s, ", which.c_str());
+      gdcm::Tag hTag(a,b);
+      if (hTag.IsPrivate()) {
+        hTag = gdcm::PrivateTag(a,b);
+      }
+
 
       // if 'a' is a private tag we need to use gdcm::PrivateTag(a,b) here!
-      if (!ds.FindDataElement(gdcm::Tag(a, b))) {
+      if (!ds.FindDataElement(hTag)) {
 
         // if the inserted element is a sequence we need to do more
         // Example
@@ -1328,7 +1349,7 @@ void *ReadFilesThread(void *voidparams) {
           // https://www.rsna.org/-/media/Files/RSNA/Covid-19/RICORD/RSNA-Covid-19-Deidentification-Protocol.pdf
 
           // Create a data element
-          gdcm::DataElement de(gdcm::Tag(a, b));
+          gdcm::DataElement de(hTag);
           de.SetVR(gdcm::VR(gdcm::VR::VRType::SQ));
 
           gdcm::SmartPointer<gdcm::SequenceOfItems> sq = new gdcm::SequenceOfItems();
@@ -1340,18 +1361,18 @@ void *ReadFilesThread(void *voidparams) {
 
           gdcm::DataElement de2(gdcm::Tag(0x0008, 0x0104));
           std::string aaa = "Software"; // CodeMeaning
-          size_t len = aaa.size();
-          char *buf = new char[len];
-          strncpy(buf, aaa.c_str(), len);
-          de2.SetByteValue(buf, (uint32_t)len);
+          //size_t len = aaa.size();
+          //char *buf = new char[len];
+          //strncpy(buf, aaa.c_str(), len);
+          de2.SetByteValue(aaa.c_str(), (uint32_t)aaa.size());
           de2.SetVR(gdcm::VR(gdcm::VR::VRType::LO));
 
           gdcm::DataElement de3(gdcm::Tag(0x0008, 0x0100));
           aaa = "github.com/mmiv-center/DICOMAnonymizer"; // CodeValue
-          len = aaa.size();
-          char *buf2 = new char[len];
-          strncpy(buf2, aaa.c_str(), len);
-          de3.SetByteValue(buf2, (uint32_t)len);
+          //len = aaa.size();
+          //char *buf2 = new char[len];
+          //strncpy(buf2, aaa.c_str(), len);
+          de3.SetByteValue(aaa.c_str(), (uint32_t)aaa.size());
           de3.SetVR(gdcm::VR(gdcm::VR::VRType::SH));
 
           gdcm::DataSet &nds = it.GetNestedDataSet();
@@ -1363,7 +1384,7 @@ void *ReadFilesThread(void *voidparams) {
           ds.Insert(de);
         } else {
           //  add the element, we want to have it in all files we produce
-          gdcm::DataElement elem(gdcm::Tag(a, b));
+          gdcm::DataElement elem(hTag);
           // set the correct VR - if that is in the dictionary
           gdcm::Global gl;
           // hope this works always... not sure here
@@ -1388,9 +1409,9 @@ void *ReadFilesThread(void *voidparams) {
 
     std::string filenamestring = "";
     std::string seriesdirname = ""; // only used if byseries is true
-    gdcm::Trace::SetDebug(true);
-    gdcm::Trace::SetWarning(true);
-    gdcm::Trace::SetError(true);
+    //gdcm::Trace::SetDebug(true);
+    //gdcm::Trace::SetWarning(true);
+    //gdcm::Trace::SetError(true);
 
     // lets add the private group entries
     // gdcm::AddTag(gdcm::Tag(0x65010010), gdcm::VR::LO, "MY NEW DATASET", reader.GetFile().GetDataSet());
@@ -1420,12 +1441,19 @@ void *ReadFilesThread(void *voidparams) {
           continue;
         }
       }*/
+      gdcm::Tag hTag(a,b);
+      if (hTag.IsPrivate()) {
+        hTag = gdcm::PrivateTag(a,b);
+      }
+
+      if (which == "DeIdentificationMethodCodeSequence")
+        continue; // already handeled above
 
       if (work[i].size() > 4 && work[i][4] == "regexp") {
         regexp = true;
         // as a test print out what we got
-        if (ds.FindDataElement(gdcm::Tag(a, b))) {
-          std::string val = sf.ToString(gdcm::Tag(a, b));
+        if (ds.FindDataElement(hTag)) {
+          std::string val = sf.ToString(hTag);
           std::string ns("");
           try {
             std::regex re(what);
@@ -1443,44 +1471,44 @@ void *ReadFilesThread(void *voidparams) {
           }
           // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
           // ns.c_str());
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), ns, ds).c_str());
+          anon.Replace(hTag, limitToMaxLength(hTag, ns, ds).c_str());
         }
         continue;
       }
       if (which == "BlockOwner" && what != "replace") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, what, ds).c_str());
         continue;
       }
       if (which == "ProjectName" || which == "PROJECTNAME") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
         continue;
       }
       if (which == "PatientID" || which == "PATIENTID") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->patientid, ds).c_str());
         continue;
       }
       if (what == "ProjectName" || what == "PROJECTNAME") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->projectname, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->projectname, ds).c_str());
         continue;
       }
       if (what == "PatientID" || what == "PATIENTID") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->patientid, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->patientid, ds).c_str());
         continue;
       }
       if (what == "EventName" || what == "EVENTNAME") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a, b), params->eventname, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->eventname, ds).c_str());
         continue;
       }
       if (which == "BodyPartExamined" && what == "BODYPART") {
         // allow all allowedBodyParts, or set to BODYPART
-        if (ds.FindDataElement(gdcm::Tag(a, b))) {
-          std::string input_bodypart = sf.ToString(gdcm::Tag(a, b));
+        if (ds.FindDataElement(hTag)) {
+          std::string input_bodypart = sf.ToString(hTag);
           bool found = false;
           for (int b_idx = 0; b_idx < allowedBodyParts.size(); b_idx++) {
             // what is the current value in this tag?
@@ -1502,21 +1530,21 @@ void *ReadFilesThread(void *voidparams) {
       }
 
       if (what == "replace") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), which, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, which, ds).c_str());
         continue;
       }
       if (what == "remove") {
-        anon.Remove(gdcm::Tag(a, b));
+        anon.Remove(hTag);
         continue;
       }
       if (what == "empty") {
-        anon.Empty(gdcm::Tag(a, b));
+        anon.Empty(hTag);
         continue;
       }
       if (what == "hashuid+PROJECTNAME") {
-        if (ds.FindDataElement(gdcm::Tag(a, b))) {
-          std::string val = sf.ToString(gdcm::Tag(a, b)); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
+        if (ds.FindDataElement(hTag)) {
+          std::string val = sf.ToString(hTag); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
           //std::string hash = SHA256::digestString(val + params->projectname).toHex();
           std::string hash = betterUID(val + params->projectname);
           if (which == "SOPInstanceUID") // keep a copy as the filename for the output
@@ -1541,14 +1569,14 @@ void *ReadFilesThread(void *voidparams) {
           }
 
           //if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
+          anon.Replace(hTag, limitToMaxLength(hTag, hash, ds).c_str());
           // this does not replace elements inside sequences
           continue;
         }
       }
       if (what == "hashuid" || what == "hash") {
-        if (ds.FindDataElement(gdcm::Tag(a, b))) {
-          std::string val = sf.ToString(gdcm::Tag(a, b));
+        if (ds.FindDataElement(hTag)) {
+          std::string val = sf.ToString(hTag);
           std::string hash = SHA256::digestString(val).toHex();
           if (which == "SOPInstanceUID") // keep a copy as the filename for the output
             filenamestring = hash.c_str();
@@ -1569,7 +1597,7 @@ void *ReadFilesThread(void *voidparams) {
             }
           }
 
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), hash, ds).c_str());
+          anon.Replace(hTag, limitToMaxLength(hTag, hash, ds).c_str());
           continue;
         }
       }
@@ -1578,9 +1606,9 @@ void *ReadFilesThread(void *voidparams) {
         continue;
       }
       if (what == "incrementdate") {
-        if (ds.FindDataElement(gdcm::Tag(a, b))) {
+        if (ds.FindDataElement(hTag)) {
           int nd = params->dateincrement;
-          std::string val = sf.ToString(gdcm::Tag(a, b));
+          std::string val = sf.ToString(hTag);
           // parse the date string YYYYMMDD
           struct sdate date1;
           if (sscanf(val.c_str(), "%04ld%02ld%02ld", &date1.y, &date1.m, &date1.d) == 3) {
@@ -1591,7 +1619,7 @@ void *ReadFilesThread(void *voidparams) {
             snprintf(dat, 256, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
             // fprintf(stdout, "found a date : %s, replace with date: %s\n",
             // val.c_str(), dat);
-            anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), std::string(dat), ds).c_str());
+            anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
           } else {
             // could not read the date here, just remove instead
             // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
@@ -1606,7 +1634,7 @@ void *ReadFilesThread(void *voidparams) {
             char dat[256];
             snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
             // fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
-            anon.Replace(gdcm::Tag(a, b), dat);
+            anon.Replace(hTag, dat);
           }
           continue;
         }
@@ -1627,7 +1655,7 @@ void *ReadFilesThread(void *voidparams) {
             snprintf(dat, 256, "%04ld%02ld%02ld%s", date2.y, date2.m, date2.d, t);
             // fprintf(stdout, "found a date : %s, replace with date: %s\n",
             // val.c_str(), dat);      
-            anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), std::string(dat), ds).c_str());
+            anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
           } else {
             // could not read the date here, just remove instead
             // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
@@ -1636,37 +1664,37 @@ void *ReadFilesThread(void *voidparams) {
 
             // TODO: We should try harder here. The day and month might be missing components
             // and we still have a DT field that is valid (null components).
-            anon.Replace(gdcm::Tag(a, b), "");
+            anon.Replace(hTag, "");
           }
           continue;
         }
       }
       if (what == "YES") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), "YES");
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, "YES");
         continue;
       }
       if (what == "MODIFIED") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), "MODIFIED");
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, "MODIFIED");
         continue;
       }
       if (what == "PROJECTNAME") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->projectname, ds).c_str());
         continue;
       }
       if (what == "SITENAME") {
-        if (ds.FindDataElement(gdcm::Tag(a, b)))
-          anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), params->sitename, ds).c_str());
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->sitename, ds).c_str());
         continue;
       }
       // Some entries have Re-Mapped, that could be a name on the command line or,
       // by default we should hash the id
       // fprintf(stdout, "Warning: set to what: %s %s which: %s what: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str());
       // fallback, if everything fails we just use the which and set that's field value
-      if (ds.FindDataElement(gdcm::Tag(a, b)))
-        anon.Replace(gdcm::Tag(a, b), limitToMaxLength(gdcm::Tag(a,b), what, ds).c_str());
+      if (ds.FindDataElement(hTag))
+        anon.Replace(hTag, limitToMaxLength(hTag, what, ds).c_str());
     }
 
     // hash of the patient id
@@ -1713,7 +1741,7 @@ void *ReadFilesThread(void *voidparams) {
     // fprintf(stdout, "project name is: %s\n", params->projectname.c_str());
     // this is a private tag --- does not work yet - we can only remove
     if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1010)))
-      anon.Remove(gdcm::Tag(0x0013, 0x1010));
+      anon.Remove(gdcm::PrivateTag(0x0013, 0x1010));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1010), params->projectname.c_str())) {
       gdcm::Trace::SetDebug( true );
       gdcm::Trace::SetWarning( true );
@@ -1722,16 +1750,16 @@ void *ReadFilesThread(void *voidparams) {
                                                        //        fprintf(stderr, "failed setting tags 0013,1010 to empty.\n");
     }*/
     if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1013)))
-      anon.Remove(gdcm::Tag(0x0013, 0x1013));
+      anon.Remove(gdcm::PrivateTag(0x0013, 0x1013));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1013), params->sitename.c_str())) {
       bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1013));
       //      if (!ok)
       //        fprintf(stderr, "failed setting tags 0013,1013 to empty.\n");
     }*/
-    if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1011)))
-      anon.Remove(gdcm::Tag(0x0013, 0x1011));
-    if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1012)))
-      anon.Remove(gdcm::Tag(0x0013, 0x1012));
+    if (ds.FindDataElement(gdcm::PrivateTag(0x0013, 0x1011)))
+      anon.Remove(gdcm::PrivateTag(0x0013, 0x1011));
+    if (ds.FindDataElement(gdcm::PrivateTag(0x0013, 0x1012)))
+      anon.Remove(gdcm::PrivateTag(0x0013, 0x1012));
     /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1012), params->sitename.c_str())) {
       //fprintf(stderr, "Cannot set private tag 0013, 1012, try to set to 0\n");
       bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1012)); // could fail if the element does not exist
@@ -1762,7 +1790,7 @@ void *ReadFilesThread(void *voidparams) {
       fn = params->outputdir + "/" + seriesdirname + "/" + filenamestring + ".dcm";
     }
 
-    fprintf(stdout, "[%d] write to file: %s\n", params->thread, fn.c_str());
+    fprintf(stdout, "[%d %.0f %%] write to file: %s\n", params->thread, (1.0f*file)/nfiles*100.0f, fn.c_str());
     std::string outfilename(fn);
 
     // save the file again to the output
@@ -2019,7 +2047,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (options[VERSION]) {
-    fprintf(stdout, "anonymizer version 1.0.1\n");
+    fprintf(stdout, "anonymizer version 1.0.2\n");
     return 0;
   }
 
@@ -2317,12 +2345,14 @@ int main(int argc, char *argv[]) {
         break;
     }
   }
+  // number of processed files
+  size_t nfiles = 0;
 
   // Check if user pass in a single directory
   if (gdcm::System::FileIsDirectory(input.c_str())) {
     std::vector<std::string> files = listFiles(input.c_str());
 
-    const size_t nfiles = files.size();
+    nfiles = files.size();
     const char **filenames = new const char *[nfiles];
     for (unsigned int i = 0; i < nfiles; ++i) {
       filenames[i] = files[i].c_str();
@@ -2351,10 +2381,12 @@ int main(int argc, char *argv[]) {
 
     const char **filenames = new const char *[1];
     filenames[0] = input.c_str();
+    nfiles = 1;
     // ReadFiles(1, filenames, output.c_str(), 1, confidence, storeMappingAsJSON);
-    ReadFiles(1, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, numthreads, projectname.c_str(), sitename.c_str(), eventname.c_str(),
+    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, numthreads, projectname.c_str(), sitename.c_str(), eventname.c_str(),
               siteid.c_str(), storeMappingAsJSON);
   }
+  fprintf(stdout, "Done [%'zu files processed].\n", nfiles);
 
   return 0;
 }
