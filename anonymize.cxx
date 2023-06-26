@@ -1234,7 +1234,8 @@ std::string betterUID(std::string val) {
 
 void *ReadFilesThread(void *voidparams) {
   threadparams *params = static_cast<threadparams *>(voidparams);
-
+  gdcm::Global gl;
+  
   const size_t nfiles = params->nfiles;
   for (unsigned int file = 0; file < nfiles; ++file) {
     const char *filename = params->filenames[file];
@@ -1386,7 +1387,7 @@ void *ReadFilesThread(void *voidparams) {
           //  add the element, we want to have it in all files we produce
           gdcm::DataElement elem(hTag);
           // set the correct VR - if that is in the dictionary
-          gdcm::Global gl;
+          //gdcm::Global gl;
           // hope this works always... not sure here
           try {
             elem.SetVR(gl.GetDicts().GetDictEntry(hTag, (const char *)nullptr).GetVR());
@@ -1640,9 +1641,9 @@ void *ReadFilesThread(void *voidparams) {
         }
       }
       if (what == "incrementdatetime") {
-        if (ds.FindDataElement(gdcm::Tag(a, b))) {
+        if (ds.FindDataElement(hTag)) {
           int nd = params->dateincrement;
-          std::string val = sf.ToString(gdcm::Tag(a, b));
+          std::string val = sf.ToString(hTag);
           // parse the date string YYYYMMDDHHMMSS
           struct sdate date1;
           char t[248];
