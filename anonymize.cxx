@@ -613,7 +613,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0018", "4000", "AcquisitionComments", "keep"},
     {"0040", "0555", "AcquisitionContextSeq", "remove"},
     {"0008", "0022", "AcquisitionDate", "incrementdate"},
-    {"0008", "002a", "AcquisitionDatetime", "incrementdate"},
+    {"0008", "002a", "AcquisitionDateTime", "incrementdatetime"},
     {"0018", "1400", "AcquisitionDeviceProcessingDescription", "keep"},
     {"0018", "9424", "AcquisitionProtocolDescription", "keep"},
     {"0008", "0032", "AcquisitionTime", "keep"},
@@ -1389,7 +1389,7 @@ void *ReadFilesThread(void *voidparams) {
           gdcm::Global gl;
           // hope this works always... not sure here
           try {
-            elem.SetVR(gl.GetDicts().GetDictEntry(gdcm::Tag(a, b), (const char *)nullptr).GetVR());
+            elem.SetVR(gl.GetDicts().GetDictEntry(hTag, (const char *)nullptr).GetVR());
           } catch (const std::exception &ex) {
             std::cout << "Caught exception \"" << ex.what() << "\"\n";
           }
