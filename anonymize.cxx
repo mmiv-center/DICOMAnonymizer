@@ -1619,6 +1619,19 @@ void *ReadFilesThread(void *voidparams) {
       if (what == "hashuid" || what == "hash") {
         if (ds.FindDataElement(hTag)) {
           std::string val = sf.ToString(hTag);
+
+	  // Question: What happens if the string exists and is empty? In that case we get the same hash value for
+	  // studies that should be different (PACS wants to have unique numbers). Lets check if that is the case.
+	  // Question: What if the string is not empty but contains a string that is not unique (like "1"). In that
+	  // case the PACS might assume that the request id is the same, but the patient info does not match resulting
+	  // in a mismatch error.
+	  // For now we replace the StudyID with the hash of the StudyInstanceUID - ALWAYS.
+	  if (which == "StudyID") {
+	    // if this is the case replace the StudyID with the hash from the StudyInstanceUID
+	    val = trueStudyInstanceUID;
+	    //fprintf(stderr, "WARNING: OUR StudyID tag was empty, now it is: \"%s\"\n", val.c_str());
+	  }
+
           std::string hash = "";
           if (params->old_style_uid) {
             hash = SHA256::digestString(val).toHex();
@@ -1626,6 +1639,7 @@ void *ReadFilesThread(void *voidparams) {
             SHA256::digest a = SHA256::digestString(val);
             hash = toDec(a.data, a.size);            
           }
+
           if (which == "SOPInstanceUID") // keep a copy as the filename for the output
             filenamestring = hash.c_str();
 
