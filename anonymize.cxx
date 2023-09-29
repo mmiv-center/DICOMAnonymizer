@@ -46,6 +46,8 @@
 #include <filesystem> // needs C++-17
 namespace fs = std::filesystem;
 
+#cmakedefine VERSION_DATE "@VERSION_DATE@"
+
 struct threadparams {
   const char **filenames;
   size_t nfiles;
@@ -860,7 +862,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0032", "1050", "StudyCompletionDate", "incrementdate"},
     {"0008", "0020", "StudyDate", "incrementdate", "", "createIfMissing"},
     {"0008", "1030", "StudyDescription", "keep"},
-    {"0020", "0010", "StudyID", "empty"},
+    {"0020", "0010", "StudyID", "hash"},
     {"0032", "0012", "StudyIDIssuer", "remove"},
     {"0020", "000d", "StudyInstanceUID", "hashuid+PROJECTNAME"},
     {"0008", "0030", "StudyTime", "keep", "", "createIfMissing"},
@@ -2085,7 +2087,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (options[VERSION]) {
-    fprintf(stdout, "anonymizer version 1.0.2\n");
+    fprintf(stdout, "anonymizer version 1.0.3.%s\n", VERSION_DATE);
     return 0;
   }
 

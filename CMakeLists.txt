@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8.11)
+cmake_minimum_required (VERSION 3.10)
 
 project (anonymize)
 
@@ -11,6 +11,11 @@ ELSE()
    SET(CMAKE_CXX_FLAGS "-std=c++17 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
 ENDIF()
 
+# add a date stamp to the version string
+string(TIMESTAMP TODAY "%Y%m%d")
+set(VERSION_DATE "${TODAY}")
+configure_file(anonymize.cxx anonymize_versioned.cxx)
+
 FIND_LIBRARY(LIBXML2_LIBRARY NAMES xml2)
 FIND_LIBRARY(JPEG_LIBRARY NAMES jpeg)
 FIND_LIBRARY(ZLIB_LIBRARY NAMES z)
@@ -21,7 +26,7 @@ message(STATUS JPEG_LIBRARY = ${JPEG_LIBRARY})
 message(STATUS ZLIB_LIBRARY = ${ZLIB_LIBRARY})
 message(STATUS XLST_LIBRARY = ${XLST_LIBRARY})
 
-add_executable (anonymize anonymize.cxx ${CMAKE_CURRENT_SOURCE_DIR})
+add_executable (anonymize anonymize_versioned.cxx ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories (anonymize PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/DataStructureAndEncodingDefinition ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.20/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.20/Source/MediaStorageAndFileFormat/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.20/Source/InformationObjectDefinition/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.20/Source/DataDictionary/ ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.20/bin/Source/Common ${CMAKE_CURRENT_SOURCE_DIR}/GDCM-3.0.20/Source/DataStructureAndEncodingDefinition ${LIBXML2_INCLUDE_DIR})
 
 SET(GDCM_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/gdcm-build/bin)
