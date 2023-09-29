@@ -1113,13 +1113,13 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
             const gdcm::ByteValue *bv = cm.GetByteValue();
             if (bv != NULL) {
               std::string dup(bv->GetPointer(), bv->GetLength());
-              std::string hash = "";
-              if (params->old_style_uid) {
+              std::string hash = betterUID(dup + params->projectname, params->old_style_uid);
+              /*if (params->old_style_uid) {
                 hash = SHA256::digestString(dup + params->projectname).toHex();
               } else {
                 SHA256::digest a = SHA256::digestString(dup + params->projectname);
                 hash = toDec(a.data, a.size);
-              }
+              }*/
               std::string hash_limited = limitToMaxLength(aa, hash, *dss);
               // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
               cm.SetByteValue(hash_limited.c_str(), (uint32_t)hash_limited.size());
@@ -1168,13 +1168,13 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
                 const gdcm::ByteValue *bv = cm.GetByteValue();
                 if (bv != NULL) {
                   std::string dup(bv->GetPointer(), bv->GetLength());
-                  std::string hash = "";
-                  if (params->old_style_uid) {
+                  std::string hash = betterUID(dup + params->projectname, params->old_style_uid);
+                  /*if (params->old_style_uid) {
                     hash = SHA256::digestString(dup + params->projectname).toHex();
                   } else {
                     SHA256::digest a = SHA256::digestString(dup + params->projectname);
                     hash = toDec(a.data, a.size);
-                  }
+                  }*/
 
                   std::string hash_limited = limitToMaxLength(aa, hash, *dss);
                   // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
@@ -1624,11 +1624,15 @@ void *ReadFilesThread(void *voidparams) {
             if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
               // fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
               val = trueStudyInstanceUID;
-              if (params->old_style_uid) {
-                hash = SHA256::digestString(val).toHex();
-              } else {
-                SHA256::digest a = SHA256::digestString(val);
-                hash = toDec(a.data, a.size);
+              if (what == "hashuid") { // with root
+                hash = betterUID(val);
+              } else { // if we can use the hash instead, no root infront
+                if (params->old_style_uid) {
+                  hash = SHA256::digestString(val).toHex();
+                } else {
+                  SHA256::digest a = SHA256::digestString(val);
+                  hash = toDec(a.data, a.size);
+                }
               }
             }
           }
@@ -2032,11 +2036,11 @@ const option::Descriptor usage[] = {
      "  --exportanon, -a  \tWrites the anonymization structure as a json file "
      "to disk and quits the program. There is no way to import a new file currently."},
     {BYSERIES, 0, "b", "byseries", Arg::None,
-     "  --byseries, -b  \tWrites each DICOM file into a separate directory "
+     "  --byseries, -b  \tFlag to writes each DICOM file into a separate directory "
      "by image series."},
     {OLDSTYLEUID, 0, "u", "oldstyleuid", Arg::None,
-     "  --oldstyleuid, -u  \tUses alphanumeric characters as generated UIDs (deprecated)."},
-    {STOREMAPPING, 0, "m", "storemapping", Arg::None, "  --storemapping, -m  \tStore the StudyInstanceUID mapping as a JSON file."},
+     "  --oldstyleuid, -u  \tFlag to use alpha-numeric characters as UIDs (deprecated)."},
+    {STOREMAPPING, 0, "m", "storemapping", Arg::None, "  --storemapping, -m  \tFlag to store the StudyInstanceUID mapping as a JSON file."},
     {TAGCHANGE, 0, "P", "tagchange", Arg::Required, "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
     {REGTAGCHANGE, 0, "R", "regtagchange", Arg::Required,
      "  --regtagchange, -R  \tChanges the default behavior for a tag in the build-in rules (understands regular expressions, retains all capturing groups)."},
