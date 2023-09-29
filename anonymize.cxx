@@ -59,6 +59,7 @@ struct threadparams {
   int dateincrement;
   bool byseries;
   int thread; // number of the thread
+  bool old_style_uid;
   // each thread will store here the study instance uid (original and mapped)
   std::map<std::string, std::string> byThreadStudyInstanceUID;
   std::map<std::string, std::string> byThreadSeriesInstanceUID;
@@ -1002,6 +1003,42 @@ std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm:
   return str_in;
 }*/
 
+// The TeraRecon workstation rejects images with StudyInstanceUIDs that
+// do not contains some dots and numbers only. We should be closer to the
+// standard if we start with our organizational root.
+//
+// We still do not fulfil the standard (http://dicom.nema.org/dicom/2013/output/chtml/part05/chapter_9.html)
+// because only 0-9 characters are allowed.
+
+// We have a second case for UIDs outside the standard creating problems.
+// The Screenpoint software also tests for the standard on UIDs before the
+// any processing is done.
+
+// toDec() stupid attempt because 0-5 will be more often in the data compared to 6-9
+std::string toDec(SHA256::Byte *data, int size) {
+	std::string ret="";
+	const char *decdigit="0123456789012345";
+	for (int i=0;i<size;i++) {
+		ret+=decdigit[(data[i]>>4)&0xf]; // high 4 bits
+		ret+=decdigit[(data[i]   )&0xf]; // low 4 bits
+	}
+	return ret;
+}
+
+std::string betterUID(std::string val, bool old_style_uid=false) {
+  std::string prefix = "1.3.6.1.4.1.45037"; // organizational prefix for us
+  std::string hash = "";  
+  if (old_style_uid) { // hexadecimal characters in UID (against standard for DICOM UIDs!)
+    hash = SHA256::digestString(val).toHex();
+  } else { // new style replacing alphas with numeric characters
+    SHA256::digest a = SHA256::digestString(val);
+    hash = toDec(a.data, a.size);
+  }
+  std::string phash = prefix + "." + hash;
+  return phash.substr(0,63); // bummer: this truncates our hash value, should be 64
+}
+
+
 // anonymizes only two levels in a sequence
 void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqur) {
   gdcm::DataElement squr = dss->GetDataElement(*tsqur);
@@ -1074,7 +1111,13 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
             const gdcm::ByteValue *bv = cm.GetByteValue();
             if (bv != NULL) {
               std::string dup(bv->GetPointer(), bv->GetLength());
-              std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+              std::string hash = "";
+              if (params->old_style_uid) {
+                hash = SHA256::digestString(dup + params->projectname).toHex();
+              } else {
+                SHA256::digest a = SHA256::digestString(dup + params->projectname);
+                hash = toDec(a.data, a.size);
+              }
               std::string hash_limited = limitToMaxLength(aa, hash, *dss);
               // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
               cm.SetByteValue(hash_limited.c_str(), (uint32_t)hash_limited.size());
@@ -1123,7 +1166,14 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
                 const gdcm::ByteValue *bv = cm.GetByteValue();
                 if (bv != NULL) {
                   std::string dup(bv->GetPointer(), bv->GetLength());
-                  std::string hash = SHA256::digestString(dup + params->projectname).toHex();
+                  std::string hash = "";
+                  if (params->old_style_uid) {
+                    hash = SHA256::digestString(dup + params->projectname).toHex();
+                  } else {
+                    SHA256::digest a = SHA256::digestString(dup + params->projectname);
+                    hash = toDec(a.data, a.size);
+                  }
+
                   std::string hash_limited = limitToMaxLength(aa, hash, *dss);
                   // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
                   cm.SetByteValue(hash_limited.c_str(), (uint32_t)hash_limited.size());
@@ -1194,34 +1244,6 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
   return;
 }
 
-// The TeraRecon workstation rejects images with StudyInstanceUIDs that
-// do not contains some dots and numbers only. We should be closer to the
-// standard if we start with our organizational root.
-//
-// We still do not fulfil the standard (http://dicom.nema.org/dicom/2013/output/chtml/part05/chapter_9.html)
-// because only 0-9 characters are allowed.
-
-// toDec() stupid attempt because 0-5 will be more often in the data compared to 6-9
-std::string toDec(SHA256::Byte *data, int size) {
-	std::string ret="";
-	for (int i=0;i<size;i++) {
-		const char *decdigit="0123456789012345";
-		ret+=decdigit[(data[i]>>4)&0xf]; // high 4 bits
-		ret+=decdigit[(data[i]   )&0xf]; // low 4 bits
-	}
-	return ret;
-}
-
-std::string betterUID(std::string val) {
-  std::string prefix = "1.3.6.1.4.1.45037"; // organizational prefix for us
-  // We may support more modes in the future but for now we use a hex tail
-  std::string hash = SHA256::digestString(val).toHex();
-  // Alternative way to create UIDs (without hex tail)
-  //SHA256::digest a = SHA256::digestString(val);
-  //std::string hash = toDec(a.data, a.size);
-  std::string phash = prefix + "." + hash;
-  return phash.substr(0,63); // bummer: this truncates our hash value, should be 64
-}
 
 /*std::string getStringValue(gdcm::Tag t, gdcm::StringFilter *sf) {
   // try a StringFilter if we have the right value representation
@@ -1547,7 +1569,7 @@ void *ReadFilesThread(void *voidparams) {
         if (ds.FindDataElement(hTag)) {
           std::string val = sf.ToString(hTag); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
           //std::string hash = SHA256::digestString(val + params->projectname).toHex();
-          std::string hash = betterUID(val + params->projectname);
+          std::string hash = betterUID(val + params->projectname, params->old_style_uid);
           if (which == "SOPInstanceUID") // keep a copy as the filename for the output
             filenamestring = hash.c_str();
 
@@ -1559,7 +1581,7 @@ void *ReadFilesThread(void *voidparams) {
             if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
               val = trueStudyInstanceUID;
               // hash = SHA256::digestString(val + params->projectname).toHex();
-              hash = betterUID(val + params->projectname);
+              hash = betterUID(val + params->projectname, params->old_style_uid);
             }
             // we want to keep a mapping of the old and new study instance uids
             params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
@@ -1578,7 +1600,13 @@ void *ReadFilesThread(void *voidparams) {
       if (what == "hashuid" || what == "hash") {
         if (ds.FindDataElement(hTag)) {
           std::string val = sf.ToString(hTag);
-          std::string hash = SHA256::digestString(val).toHex();
+          std::string hash = "";
+          if (params->old_style_uid) {
+            hash = SHA256::digestString(val).toHex();
+          } else {
+            SHA256::digest a = SHA256::digestString(val);
+            hash = toDec(a.data, a.size);            
+          }
           if (which == "SOPInstanceUID") // keep a copy as the filename for the output
             filenamestring = hash.c_str();
 
@@ -1594,7 +1622,12 @@ void *ReadFilesThread(void *voidparams) {
             if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
               // fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
               val = trueStudyInstanceUID;
-              hash = SHA256::digestString(val).toHex();
+              if (params->old_style_uid) {
+                hash = SHA256::digestString(val).toHex();
+              } else {
+                SHA256::digest a = SHA256::digestString(val);
+                hash = toDec(a.data, a.size);
+              }
             }
           }
 
@@ -1818,8 +1851,8 @@ void ShowFilenames(const threadparams &params) {
   std::cout << "end" << std::endl;
 }
 
-void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, const char *patientid, int dateincrement, bool byseries, int numthreads,
-               const char *projectname, const char *sitename, const char *eventname, const char *siteid, std::string storeMappingAsJSON) {
+void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, const char *patientid, int dateincrement, bool byseries, bool old_style_uid, 
+               int numthreads, const char *projectname, const char *sitename, const char *eventname, const char *siteid, std::string storeMappingAsJSON) {
   // \precondition: nfiles > 0
   assert(nfiles > 0);
 
@@ -1889,6 +1922,7 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
     params[thread].projectname = projectname;
     params[thread].sitename = sitename;
     params[thread].siteid = siteid;
+    params[thread].old_style_uid = old_style_uid;
     if (thread == nthreads - 1) {
       // There is slightly more files to process in this thread:
       params[thread].nfiles += nfiles % nthreads;
@@ -1973,6 +2007,7 @@ enum optionIndex {
   STOREMAPPING,
   SITEID,
   REGTAGCHANGE,
+  OLDSTYLEUID,
   VERSION
 };
 const option::Descriptor usage[] = {
@@ -1997,6 +2032,8 @@ const option::Descriptor usage[] = {
     {BYSERIES, 0, "b", "byseries", Arg::None,
      "  --byseries, -b  \tWrites each DICOM file into a separate directory "
      "by image series."},
+    {OLDSTYLEUID, 0, "u", "oldstyleuid", Arg::None,
+     "  --oldstyleuid, -u  \tUses alphanumeric characters as generated UIDs (deprecated)."},
     {STOREMAPPING, 0, "m", "storemapping", Arg::None, "  --storemapping, -m  \tStore the StudyInstanceUID mapping as a JSON file."},
     {TAGCHANGE, 0, "P", "tagchange", Arg::Required, "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
     {REGTAGCHANGE, 0, "R", "regtagchange", Arg::Required,
@@ -2064,6 +2101,7 @@ int main(int argc, char *argv[]) {
   int dateincrement = 42;
   std::string exportanonfilename = ""; // anon.json
   bool byseries = false;
+  bool old_style_uid = false; // default is that we do not use old style alphanumeric characters in uid
   int numthreads = 4;
   std::string projectname = "";
   std::string storeMappingAsJSON = "";
@@ -2163,6 +2201,10 @@ int main(int argc, char *argv[]) {
       case BYSERIES:
         fprintf(stdout, "--byseries\n");
         byseries = true;
+        break;
+      case OLDSTYLEUID:
+        fprintf(stdout, "--oldstyleuid\n");
+        old_style_uid = true;
         break;
       case STOREMAPPING:
         fprintf(stdout, "--storemapping\n");
@@ -2368,7 +2410,7 @@ int main(int argc, char *argv[]) {
     }
 
     // ReadFiles(nfiles, filenames, output.c_str(), numthreads, confidence, storeMappingAsJSON);
-    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, numthreads, projectname.c_str(), sitename.c_str(),
+    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, old_style_uid, numthreads, projectname.c_str(), sitename.c_str(),
               eventname.c_str(), siteid.c_str(), storeMappingAsJSON);
     delete[] filenames;
   } else {
@@ -2384,7 +2426,7 @@ int main(int argc, char *argv[]) {
     filenames[0] = input.c_str();
     nfiles = 1;
     // ReadFiles(1, filenames, output.c_str(), 1, confidence, storeMappingAsJSON);
-    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, numthreads, projectname.c_str(), sitename.c_str(), eventname.c_str(),
+    ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, old_style_uid, numthreads, projectname.c_str(), sitename.c_str(), eventname.c_str(),
               siteid.c_str(), storeMappingAsJSON);
   }
   fprintf(stdout, "Done [%'zu files processed].\n", nfiles);
