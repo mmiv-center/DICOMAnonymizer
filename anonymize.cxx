@@ -67,6 +67,8 @@ struct threadparams {
   std::map<std::string, std::string> byThreadSeriesInstanceUID;
 };
 
+int debug_level = 0;
+
 // Coding Scheme Designator        Code Value      Code Meaning    Body Part Examined
 nlohmann::json allowedBodyParts = nlohmann::json::array({{"SCT", "818981001", "Abdomen", "ABDOMEN"},
                                                          {"SCT", "818982008", "Abdomen and Pelvis", "ABDOMENPELVIS"},
@@ -764,6 +766,7 @@ nlohmann::json work = nlohmann::json::array({
     {"0010", "1030", "PatientWeight", "keep"},
     {"0040", "0243", "PerformedLocation", "remove"},
     {"0040", "0241", "PerformedStationAET", "keep"},
+    {"0040", "0244", "PerformedProcedureStepStartDate", "incrementdate"},
     {"0040", "4030", "PerformedStationGeoLocCodeSeq", "keep"},
     {"0040", "0242", "PerformedStationName", "keep"},
     {"0040", "4028", "PerformedStationNameCodeSeq", "keep"},
@@ -933,8 +936,9 @@ std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm:
 
   if (str_in.length() > max_l) {
     std::string str_limited = str_in.substr(0, max_l);
-    fprintf(stderr, "Warning: tag value too long (%zu), max: %u for VR: %s, will be truncated.\n",
-            str_in.length(), max_l, gdcm::VR::GetVRString(vr));
+    if (debug_level > 0)
+      fprintf(stderr, "Warning: tag value too long (%zu), max: %u for VR: %s, will be truncated.\n",
+              str_in.length(), max_l, gdcm::VR::GetVRString(vr));
     return str_limited;
   }
 
@@ -1297,6 +1301,19 @@ void *ReadFilesThread(void *voidparams) {
         break;
       }
     }
+    // can we get the modality from the file? We would like to use it as a prefix to the individual DICOM files filename
+    std::string modalitystring = "";
+    cit = dss.GetDES().begin();
+    for( ; cit != dss.GetDES().end(); ++cit) {
+      std::stringstream strm;
+      if (cit->GetTag() == gdcm::Tag(0x0008, 0x0060)) {
+        const gdcm::DataElement &de = (*cit);
+        (*cit).GetValue().Print(strm);
+        modalitystring = strm.str();
+        break;
+      }
+    }
+
     
     gdcm::DataSet copy_dss = dss;
     // look for any sequences and process them
@@ -1491,7 +1508,7 @@ void *ReadFilesThread(void *voidparams) {
               ns = std::string("FIONA: no match on regular expression");
             }
           } catch (std::regex_error &e) {
-            fprintf(stdout, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
+            fprintf(stderr, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
                     what.c_str(), val.c_str(), ns.c_str());
           }
           // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
@@ -1810,11 +1827,16 @@ void *ReadFilesThread(void *voidparams) {
     // ok save the file again
     std::string imageInstanceUID = filenamestring;
     if (imageInstanceUID == "") {
-      fprintf(stderr, "Warning: cannot read image instance uid from %s, create a new one.\n", filename);
+      if (debug_level > 0)
+        fprintf(stderr, "Warning: cannot read image instance uid from %s, create a new one.\n", filename);
       gdcm::UIDGenerator gen;
       imageInstanceUID = gen.Generate();
       filenamestring = imageInstanceUID;
     }
+    if (modalitystring != "") {
+      filenamestring = modalitystring + "." + filenamestring;
+    }
+
     std::string fn = params->outputdir + "/" + filenamestring + ".dcm";
     if (params->byseries) {
       // use the series instance uid as a directory name
@@ -1830,7 +1852,8 @@ void *ReadFilesThread(void *voidparams) {
       fn = params->outputdir + "/" + seriesdirname + "/" + filenamestring + ".dcm";
     }
 
-    fprintf(stdout, "[%d %.0f %%] write to file: %s\n", params->thread, (1.0f*file)/nfiles*100.0f, fn.c_str());
+    if (debug_level > 0)
+      fprintf(stdout, "[%d %.0f %%] write to file: %s\n", params->thread, (1.0f*file)/nfiles*100.0f, fn.c_str());
     std::string outfilename(fn);
 
     // save the file again to the output
@@ -1936,7 +1959,8 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
     assert(thread * partition < nfiles);
     int res = pthread_create(&pthread[thread], NULL, ReadFilesThread, &params[thread]);
     if (res) {
-      std::cerr << "Unable to start a new thread, pthread returned: " << res << std::endl;
+      if (debug_level > 0)
+        std::cerr << "Unable to start a new thread, pthread returned: " << res << std::endl;
       assert(0);
     }
   }
@@ -1980,7 +2004,8 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
 
     std::ofstream jsonfile(storeMappingAsJSON);
     if (!jsonfile.is_open()) {
-      fprintf(stderr, "Failed to open file \"%s\"", storeMappingAsJSON.c_str());
+      if (debug_level > 0)
+        fprintf(stderr, "Failed to open file \"%s\"", storeMappingAsJSON.c_str());
     } else {
       jsonfile << ar;
       jsonfile.flush();
@@ -1998,7 +2023,6 @@ struct Arg : public option::Arg {
 
 enum optionIndex {
   UNKNOWN,
-  HELP,
   INPUT,
   OUTPUT,
   PATIENTID,
@@ -2014,23 +2038,23 @@ enum optionIndex {
   SITEID,
   REGTAGCHANGE,
   OLDSTYLEUID,
+  VERBOSE,
   VERSION
 };
 const option::Descriptor usage[] = {
     {UNKNOWN, 0, "", "", option::Arg::None,
+     "Anonymize DICOM images. Read DICOM image series and write "
+     "out an anonymized version of the files based on the recommendations of "
+     "the cancer imaging archive.\n\n"
      "USAGE: anonymize [options]\n\n"
      "Options:"},
-    {HELP, 0, "", "help", Arg::None,
-     "  --help  \tAnonymize DICOM images. Read DICOM image series and write "
-     "out an anonymized version of the files based on the recommendations of "
-     "the cancer imaging archive."},
     {INPUT, 0, "i", "input", Arg::Required, "  --input, -i  \tInput directory."},
     {OUTPUT, 0, "o", "output", Arg::Required, "  --output, -o  \tOutput directory."},
     {PATIENTID, 0, "p", "patientid", Arg::Required, "  --patientid, -p  \tPatient ID after anonymization (default is \"hashuid\" to hash the existing id)."},
     {EVENTNAME, 0, "e", "eventname", Arg::Required, "  --eventname, -e  \tEvent name string (default is \"\")."},
-    {PROJECTNAME, 0, "j", "projectname", Arg::Required, "  --projectname, -j  \tProject name."},
-    {SITENAME, 0, "s", "sitename", Arg::Required, "  --sitename, -s  \tSite name."},
-    {SITEID, 0, "w", "siteid", Arg::Required, "  --siteid, -w  \tSite id."},
+    {PROJECTNAME, 0, "j", "projectname", Arg::Required, "  --projectname, -j  \tProject name. By default the project name is copied to the InstitutionName tag as well as tags in group 12."},
+    {SITENAME, 0, "s", "sitename", Arg::Required, "  --sitename, -s  \tSiteName DICOM tag."},
+    {SITEID, 0, "w", "siteid", Arg::Required, "  --siteid, -w  \tSiteID DICOM tag."},
     {DATEINCREMENT, 0, "d", "dateincrement", Arg::Required, "  --dateincrement, -d  \tNumber of days that should be added to dates."},
     {EXPORTANON, 0, "a", "exportanon", Arg::Required,
      "  --exportanon, -a  \tWrites the anonymization structure as a json file "
@@ -2039,20 +2063,20 @@ const option::Descriptor usage[] = {
      "  --byseries, -b  \tFlag to writes each DICOM file into a separate directory "
      "by image series."},
     {OLDSTYLEUID, 0, "u", "oldstyleuid", Arg::None,
-     "  --oldstyleuid, -u  \tFlag to use alpha-numeric characters as UIDs (deprecated)."},
+     "  --oldstyleuid, -u  \tFlag to allow alpha-numeric characters as UIDs (deprecated). Default is to only generate standard conformant UIDs with characters '0'-'9' and '.'."},
     {STOREMAPPING, 0, "m", "storemapping", Arg::None, "  --storemapping, -m  \tFlag to store the StudyInstanceUID mapping as a JSON file."},
     {TAGCHANGE, 0, "P", "tagchange", Arg::Required, "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
     {REGTAGCHANGE, 0, "R", "regtagchange", Arg::Required,
      "  --regtagchange, -R  \tChanges the default behavior for a tag in the build-in rules (understands regular expressions, retains all capturing groups)."},
     {NUMTHREADS, 0, "t", "numthreads", Arg::Required, "  --numthreads, -t  \tHow many threads should be used (default 4)."},
     {VERSION, 0, "v", "version", Arg::None, "  --version, -v  \tPrint version number."},
+    {VERBOSE, 0, "l", "debug", Arg::None, "  --debug, -l  \tPrint debug messages. Can be used more than once."},
     {UNKNOWN, 0, "", "", Arg::None,
      "\nExamples:\n"
      "  anonymize --input directory --output directory --patientid bla -d 42 -b\n"
      "  anonymize --exportanon rules.json\n"
      "  anonymize --tagchange \"0008,0080=PROJECTNAME\" --tagchange \"0008,0081=bla\" \\"
-     "            --exportanon rules.json\n"
-     "  anonymize --help\n"},
+     "            --exportanon rules.json\n"},
     {0, 0, 0, 0, 0, 0}};
 
 // TODO: would be good to start anonymizing already while its still trying to find more files...
@@ -2063,9 +2087,10 @@ std::vector<std::string> listFiles(const std::string &path) {
     //std::cout << dirEntry << std::endl;
     if (fs::is_regular_file(dirEntry.path())) {
       files.push_back(dirEntry.path());
-      if (files.size() % 100 == 0)
+      if (files.size() % 100 == 0 && debug_level > 0) {
         fprintf(stdout, "\rreading files (%'lu) ...", files.size());
         fflush(stdout);
+      }
     }
   }
   return files;
@@ -2085,13 +2110,13 @@ int main(int argc, char *argv[]) {
   if (parse.error())
     return 1;
 
-  if (options[HELP] || argc == 0) {
+  if (argc == 0) {
     option::printUsage(std::cout, usage);
     return 0;
   }
 
   if (options[VERSION]) {
-    fprintf(stdout, "anonymizer version 1.0.3.%s\n", VERSION_DATE);
+    fprintf(stdout, "anonymizer version 1.0.4.%s\n", VERSION_DATE);
     return 0;
   }
 
@@ -2115,23 +2140,23 @@ int main(int argc, char *argv[]) {
     option::Option &opt = buffer[i];
     // fprintf(stdout, "Argument #%d is ", i);
     switch (opt.index()) {
-      case HELP:
-        // not possible, because handled further above and exits the program
       case INPUT:
         if (opt.arg) {
-          fprintf(stdout, "--input '%s'\n", opt.arg);
+          if (debug_level > 0)
+            fprintf(stdout, "--input '%s'\n", opt.arg);
           input = opt.arg;
         } else {
-          fprintf(stdout, "--input needs a directory specified\n");
+          fprintf(stderr, "Error: --input needs a directory specified\n");
           exit(-1);
         }
         break;
       case OUTPUT:
         if (opt.arg) {
-          fprintf(stdout, "--output '%s'\n", opt.arg);
+          if (debug_level > 0)
+            fprintf(stdout, "--output '%s'\n", opt.arg);
           output = opt.arg;
         } else {
-          fprintf(stdout, "--output needs a directory specified\n");
+          fprintf(stderr, "Error: --output needs a directory specified\n");
           exit(-1);
         }
         // check output directory, exists and is_dir, if not exist create
@@ -2139,7 +2164,8 @@ int main(int argc, char *argv[]) {
           // create the directory
           mkdir(output.c_str(), 0777);
           if (gdcm::System::FileIsDirectory(output.c_str())) {
-            fprintf(stdout, "--output created directory \"%s\"\n", output.c_str());
+            if (debug_level > 0)
+              fprintf(stdout, "--output created directory \"%s\"\n", output.c_str());
           } else {
             fprintf(stderr, "Error: could not create directory \"%s\"\n", output.c_str());
             exit(-1);
@@ -2152,19 +2178,21 @@ int main(int argc, char *argv[]) {
         break;
       case PATIENTID:
         if (opt.arg) {
-          fprintf(stdout, "--patientid '%s'\n", opt.arg);
+          if (debug_level > 0)
+            fprintf(stdout, "--patientid '%s'\n", opt.arg);
           patientID = opt.arg;
         } else {
-          fprintf(stdout, "--patientid needs a string specified\n");
+          fprintf(stderr, "Error: --patientid needs a string specified\n");
           exit(-1);
         }
         break;
       case PROJECTNAME:
         if (opt.arg) {
-          fprintf(stdout, "--projectname '%s'\n", opt.arg);
+          if (debug_level > 0)
+            fprintf(stdout, "--projectname '%s'\n", opt.arg);
           projectname = opt.arg;
         } else {
-          fprintf(stdout, "--projectname needs a string specified\n");
+          fprintf(stderr, "Error: --projectname needs a string specified\n");
           exit(-1);
         }
         break;
@@ -2173,7 +2201,7 @@ int main(int argc, char *argv[]) {
           fprintf(stdout, "--sitename '%s'\n", opt.arg);
           sitename = opt.arg;
         } else {
-          fprintf(stdout, "--sitename needs a string specified\n");
+          fprintf(stderr, "Error: --sitename needs a string specified\n");
           exit(-1);
         }
         break;
@@ -2182,43 +2210,54 @@ int main(int argc, char *argv[]) {
           fprintf(stdout, "--eventname '%s'\n", opt.arg);
           eventname = opt.arg;
         } else {
-          fprintf(stdout, "--eventname needs a string specified\n");
+          fprintf(stderr, "Error: --eventname needs a string specified\n");
           exit(-1);
         }
         break;
       case SITEID:
         if (opt.arg) {
-          fprintf(stdout, "--siteid '%s'\n", opt.arg);
+          if (debug_level > 0)
+            fprintf(stdout, "--siteid '%s'\n", opt.arg);
           siteid = opt.arg;
         } else {
-          fprintf(stdout, "--siteid needs a string specified\n");
+          fprintf(stderr, "Error: --siteid needs a string specified\n");
           exit(-1);
         }
         break;
       case DATEINCREMENT:
         if (opt.arg) {
-          fprintf(stdout, "--dateincrement %d\n", atoi(opt.arg));
+          if (debug_level > 0)
+            fprintf(stdout, "--dateincrement %d\n", atoi(opt.arg));
           dateincrement = atoi(opt.arg);
         } else {
-          fprintf(stdout, "--dateincrement needs an integer specified\n");
+          fprintf(stderr, "Error: --dateincrement needs an integer specified\n");
           exit(-1);
         }
         break;
       case BYSERIES:
-        fprintf(stdout, "--byseries\n");
+        if (debug_level > 0)
+          fprintf(stdout, "--byseries\n");
         byseries = true;
         break;
       case OLDSTYLEUID:
-        fprintf(stdout, "--oldstyleuid\n");
+        if (debug_level > 0)
+          fprintf(stdout, "--oldstyleuid\n");
         old_style_uid = true;
         break;
+      case VERBOSE:
+        if (debug_level > 0)
+          fprintf(stdout, "--debug\n");
+        debug_level++;
+        break;
       case STOREMAPPING:
-        fprintf(stdout, "--storemapping\n");
+        if (debug_level > 0)
+          fprintf(stdout, "--storemapping\n");
         storeMappingAsJSON = "mapping.json";
         break;
       case TAGCHANGE:
         if (opt.arg) {
-          fprintf(stdout, "--tagchange %s\n", opt.arg);
+          if (debug_level > 0)
+            fprintf(stdout, "--tagchange %s\n", opt.arg);
           std::string tagchange = opt.arg;
           // apply this tag to the rules, should overwrite what was in there, or add another rule
           std::string tag1;
@@ -2226,14 +2265,14 @@ int main(int argc, char *argv[]) {
           std::string res;
           int posEqn = tagchange.find("=");
           if (posEqn == std::string::npos) {
-            fprintf(stdout, "--tagchange error, string does not match pattern %%o,%%o=%%s\n");
+            fprintf(stderr, "Error: --tagchange error, string does not match pattern %%o,%%o=%%s\n");
             exit(-1);
           }
           res = tagchange.substr(posEqn + 1, std::string::npos); // until the end of the string
           std::string front = tagchange.substr(0, posEqn);
           int posComma = front.find(",");
           if (posComma == std::string::npos) {
-            fprintf(stdout, "--tagchange error, string does not match pattern %%o,%%o=%%s\n");
+            fprintf(stderr, "Error: --tagchange error, string does not match pattern %%o,%%o=%%s\n");
             exit(-1);
           }
           tag1 = front.substr(0, posComma);
@@ -2263,18 +2302,19 @@ int main(int argc, char *argv[]) {
             ar.push_back(tag2);
             ar.push_back(res);
             ar.push_back(res);
-	    ar.push_back(std::string(""));
-	    ar.push_back(std::string("1"));
+	          ar.push_back(std::string(""));
+	          ar.push_back(std::string("1"));
             work.push_back(ar);
           }
         } else {
-          fprintf(stdout, "--tagchange needs a string specification like this \"0080,0010=ANON\"\n");
+          fprintf(stderr, "Error: --tagchange needs a string specification like this \"0080,0010=ANON\"\n");
           exit(-1);
         }
         break;
       case REGTAGCHANGE:
         if (opt.arg) {
-          fprintf(stdout, "--regtagchange %s\n", opt.arg);
+          if (debug_level > 0)
+            fprintf(stdout, "--regtagchange %s\n", opt.arg);
           std::string tagchange = opt.arg;
           // apply this tag to the rules, should overwrite what was in there, or add another rule
           std::string tag1;
@@ -2282,19 +2322,20 @@ int main(int argc, char *argv[]) {
           std::string res;
           int posEqn = tagchange.find("=");
           if (posEqn == std::string::npos) {
-            fprintf(stdout, "--regtagchange error, string does not match pattern %%o,%%o=%%s\n");
+            fprintf(stderr, "Error: --regtagchange error, string does not match pattern %%o,%%o=%%s\n");
             exit(-1);
           }
           res = tagchange.substr(posEqn + 1, std::string::npos); // until the end of the string
           std::string front = tagchange.substr(0, posEqn);
           int posComma = front.find(",");
           if (posComma == std::string::npos) {
-            fprintf(stdout, "--regtagchange error, string does not match pattern %%o,%%o=%%s\n");
+            fprintf(stderr, "Error: --regtagchange error, string does not match pattern %%o,%%o=%%s\n");
             exit(-1);
           }
           tag1 = front.substr(0, posComma);
           tag2 = front.substr(posComma + 1, std::string::npos);
-          fprintf(stdout, "got a regtagchange of %s,%s = %s\n", tag1.c_str(), tag2.c_str(), res.c_str());
+          if (debug_level > 0)
+            fprintf(stdout, "got a regtagchange of %s,%s = %s\n", tag1.c_str(), tag2.c_str(), res.c_str());
           int a = strtol(tag1.c_str(), NULL, 16);
           int b = strtol(tag2.c_str(), NULL, 16); // did this work? we should check here and not just add
           // now check in work if we add or replace this rule
@@ -2320,35 +2361,38 @@ int main(int argc, char *argv[]) {
             ar.push_back(res);
             ar.push_back(res);
             ar.push_back(std::string("regexp"));
-	    ar.push_back(std::string("1"));
+	          ar.push_back(std::string("1"));
             work.push_back(ar);
           }
         } else {
-          fprintf(stdout, "--regtagchange needs a string specification like this \"0080,0010=\\[(.*) [0-9]+\\]\"\n");
+          fprintf(stderr, "Error: --regtagchange needs a string specification like this \"0080,0010=\\[(.*) [0-9]+\\]\"\n");
           exit(-1);
         }
         break;
       case NUMTHREADS:
         if (opt.arg) {
-          fprintf(stdout, "--numthreads %d\n", atoi(opt.arg));
+          if (debug_level > 0)
+            fprintf(stdout, "--numthreads %d\n", atoi(opt.arg));
           numthreads = atoi(opt.arg);
         } else {
-          fprintf(stdout, "--numthreads needs an integer specified\n");
+          fprintf(stderr, "Error: --numthreads needs an integer specified\n");
           exit(-1);
         }
         break;
       case EXPORTANON:
         if (opt.arg) {
-          fprintf(stdout, "--exportanon %s\n", opt.arg);
+          if (debug_level > 0)
+            fprintf(stdout, "--exportanon %s\n", opt.arg);
           exportanonfilename = opt.arg;
 
           // if we need to export the json file, do that and quit
           if (exportanonfilename.length() > 0) {
             fs::path export_anon_filename = exportanonfilename;
-            fprintf(stdout,
-                    "Write the anonymization tag information as a file to disk "
-                    "and exit (\"%s\").\n",
-                    exportanonfilename.c_str());
+            if (debug_level > 0)
+              fprintf(stdout,
+                      "Write the anonymization tag information as a file to disk "
+                      "and exit (\"%s\").\n",
+                      exportanonfilename.c_str());
             if (export_anon_filename.extension() == ".csv") {
               std::ofstream csvfile(exportanonfilename);
               if (!csvfile.is_open()) {
@@ -2384,7 +2428,7 @@ int main(int argc, char *argv[]) {
             exit(0);
           }
         } else {
-          fprintf(stdout, "--exportanon needs a filename\n");
+          fprintf(stderr, "Error: --exportanon needs a filename\n");
           exit(-1);
         }
         break;
@@ -2394,6 +2438,15 @@ int main(int argc, char *argv[]) {
         break;
     }
   }
+  // based on the debug_level we can disable the warnings and error messages from gdcm
+  if (debug_level > 1) {
+     gdcm::Trace::DebugOn();
+     gdcm::Trace::ErrorOn();
+  } else {
+     gdcm::Trace::DebugOff();
+     gdcm::Trace::ErrorOff();
+  }
+
   // number of processed files
   size_t nfiles = 0;
 
@@ -2435,7 +2488,8 @@ int main(int argc, char *argv[]) {
     ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, old_style_uid, numthreads, projectname.c_str(), sitename.c_str(), eventname.c_str(),
               siteid.c_str(), storeMappingAsJSON);
   }
-  fprintf(stdout, "Done [%'zu files processed].\n", nfiles);
+  if (debug_level > 0)
+    fprintf(stdout, "Done [%'zu files processed].\n", nfiles);
 
   return 0;
 }
