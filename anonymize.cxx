@@ -1628,7 +1628,7 @@ void *ReadFilesThread(void *voidparams) {
 	  // For now we replace the StudyID with the hash of the StudyInstanceUID - ALWAYS.
 	  if (which == "StudyID") {
 	    // if this is the case replace the StudyID with the hash from the StudyInstanceUID
-	    val = trueStudyInstanceUID;
+	    val = trueStudyInstanceUID + params->projectname;
 	    //fprintf(stderr, "WARNING: OUR StudyID tag was empty, now it is: \"%s\"\n", val.c_str());
 	  }
 
