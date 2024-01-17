@@ -2,7 +2,7 @@
 
   Program: Anonymization using gdcm
 
-  Copyright (c) 2019 Hauke Bartsch
+  Copyright (c) 2024 Hauke Bartsch
 
   For debugging use:
     cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -1102,21 +1102,6 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
       //         anonymizeSequence(params, &dss, &tt);
       if (isSequence) {
         anonymizeSequence(params, &nestedds, tsqur);
-
-	
-	/*        gdcm::DataElement ppp2 = de;
-        ppp2.SetVLToUndefined();
-        gdcm::SmartPointer<gdcm::SequenceOfItems> seq = ppp2.GetValueAsSQ();
-        if (seq && seq->GetNumberOfItems()) {
-          for (int i = 1; i <= seq->GetNumberOfItems(); i++) {
-            gdcm::Item &item2 = seq->GetItem(i);
-            gdcm::DataSet &nestedds2 = item2.GetNestedDataSet(); // only items with value representation SQ might contain nested datasets
-            if (nestedds2.Size() == 0)                           // speed up if there is nothing in there, don't try to anonymize
-              continue;
-	    anonymizeSequence(params, &nestedds2, tsqur);
-	  }
-          nestedds.Replace(ppp2);
-	  } */
 	return; // we should have done our work here
       }
 
@@ -1125,6 +1110,8 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
         // fprintf(stdout, "in itemIdx %04x,%04x this is not a sequence\n", tt.GetGroup(), tt.GetElement());
 
         // what type of tag do we have? if its a sequence go through it, if not check if we have to anonymize this tag
+	// TODO: use the applyWork function instead here (make sure we anonymize everything inside sequences as well)
+	
         for (int wi = 0; wi < work.size(); wi++) {
           // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
           std::string tag1(work[wi][0]);
@@ -1146,7 +1133,7 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
           if (tt.GetGroup() != a || tt.GetElement() != b) {
             continue;
           }
-          if (aa.IsPrivate()) {
+          if (aa.IsPrivate()) { // I don't think this works. aa is still just a gdcm::Tag.
             aa = gdcm::PrivateTag(a,b);
           }
           // fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
@@ -1292,6 +1279,417 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
     return sf->ToString(t);
 }*/
 
+void applyWork(gdcm::Anonymizer &anon,
+	       threadparams *params,
+	       const std::string trueStudyInstanceUID,
+	       const std::string filename,
+	       std::string &filenamestring,
+	       std::string &seriesdirname) {
+  gdcm::File &fileToAnon = anon.GetFile();
+  gdcm::DataSet &ds = fileToAnon.GetDataSet();
+
+  gdcm::StringFilter sf;
+  sf.SetFile(fileToAnon);
+
+  gdcm::MediaStorage ms;
+  ms.SetFromFile(fileToAnon);
+  
+  for (int i = 0; i < work.size(); i++) {
+      // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
+      std::string tag1(work[i][0]);
+      std::string tag2(work[i][1]);
+      std::string which(work[i][2]);
+      std::string what("replace");
+      bool regexp = false;
+      if (work[i].size() > 3) {
+        what = work[i][3];
+      }
+      int a = strtol(tag1.c_str(), NULL, 16);
+      int b = strtol(tag2.c_str(), NULL, 16);
+      // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
+      // if we don't have this dataelement, don't do anything
+      /*if (!ds.FindDataElement(gdcm::Tag(a, b))) {
+        // In some cases we need to create the element, like if
+        // we receive that value on the command line.
+        if (work[i].size() > 5 && (work[i][5] == "1" || work[i][5] == "createIfMissing")) {
+          // we add this entry so it can be written to further down
+          anon.Empty(gdcm::Tag(a, b)); // does not work
+        } else {
+          continue;
+        }
+      }*/
+      gdcm::Tag hTag(a,b); // either hTag or phTag, better to use a union here
+      gdcm::PrivateTag phTag;
+      bool isPrivateTag = false;
+      if (hTag.IsPrivate()) {
+	//fprintf(stderr, "looking now for a PRIVATE TAG AS %x %x %s\n", a, b, which.c_str());
+        phTag = gdcm::PrivateTag(a,b,which.c_str()); // 0x71,0x22, "SIEMENS MED PT"
+	isPrivateTag = true;
+      }
+
+      if (which == "DeIdentificationMethodCodeSequence")
+        continue; // already handeled above
+
+      if (work[i].size() > 4 && work[i][4] == "regexp") {
+        regexp = true;
+        // as a test print out what we got
+        if (isPrivateTag?ds.FindDataElement(phTag):ds.FindDataElement(hTag)) {
+          std::string val = sf.ToString(hTag);
+          std::string ns("");
+          try {
+            std::regex re(what);
+            std::smatch match;
+            if (std::regex_search(val, match, re) && match.size() > 1) {
+              for (int j = 1; j < match.size(); j++) {
+                ns += match.str(j) + std::string(" ");
+              }
+            } else {
+              ns = std::string("FIONA: no match on regular expression");
+            }
+          } catch (std::regex_error &e) {
+            fprintf(stderr, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
+                    what.c_str(), val.c_str(), ns.c_str());
+          }
+          // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
+          // ns.c_str());
+          anon.Replace(isPrivateTag?phTag:hTag, limitToMaxLength(hTag, ns, ds).c_str());
+        }
+        continue;
+      }
+      if (which == "BlockOwner" && what != "replace") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, what, ds).c_str());
+        continue;
+      }
+      if (which == "ProjectName" || which == "PROJECTNAME") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(gdcm::Tag(a,b), params->projectname, ds).c_str());
+        continue;
+      }
+      if (which == "PatientID" || which == "PATIENTID") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->patientid, ds).c_str());
+        continue;
+      }
+      if (what == "ProjectName" || what == "PROJECTNAME") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->projectname, ds).c_str());
+        continue;
+      }
+      if (what == "PatientID" || what == "PATIENTID") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->patientid, ds).c_str());
+        continue;
+      }
+      if (what == "EventName" || what == "EVENTNAME") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->eventname, ds).c_str());
+        continue;
+      }
+      if (which == "BodyPartExamined" && what == "BODYPART") {
+        // allow all allowedBodyParts, or set to BODYPART
+        if (ds.FindDataElement(hTag)) {
+          std::string input_bodypart = sf.ToString(hTag);
+          bool found = false;
+          for (int b_idx = 0; b_idx < allowedBodyParts.size(); b_idx++) {
+            // what is the current value in this tag?
+            // could we have a space at the end of input_bodypart?
+            std::string allowedBP = allowedBodyParts[b_idx][3];
+            if (allowedBP.size() % 2 == 1) { // we need even length strings for comparisson
+              allowedBP += " ";
+            }
+            // fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBP.c_str());
+            if (input_bodypart.compare(allowedBP) == 0) {
+              // allowed string, keep it
+              found = true;
+              break;
+            }
+          }
+          if (found)
+            continue;
+        }
+      }
+
+      if (what == "replace") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, which, ds).c_str());
+        continue;
+      }
+      if (what == "remove") {
+        anon.Remove(hTag);
+        continue;
+      }
+      if (what == "empty") {
+        anon.Empty(hTag);
+        continue;
+      }
+      if (what == "hashuid+PROJECTNAME") {
+        if (ds.FindDataElement(hTag)) {
+          std::string val = sf.ToString(hTag); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
+          //std::string hash = SHA256::digestString(val + params->projectname).toHex();
+          std::string hash = betterUID(val + params->projectname, params->old_style_uid);
+          if (which == "SOPInstanceUID") // keep a copy as the filename for the output
+            filenamestring = hash.c_str();
+
+          if (which == "SeriesInstanceUID")
+            seriesdirname = hash.c_str();
+
+          if (which == "StudyInstanceUID") {
+            // fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
+            if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+              val = trueStudyInstanceUID;
+              // hash = SHA256::digestString(val + params->projectname).toHex();
+              hash = betterUID(val + params->projectname, params->old_style_uid);
+            }
+            // we want to keep a mapping of the old and new study instance uids
+	    params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+          }
+          if (which == "SeriesInstanceUID") {
+            // we want to keep a mapping of the old and new study instance uids
+	    params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+          }
+
+          //if (ds.FindDataElement(gdcm::Tag(a, b)))
+          anon.Replace(hTag, limitToMaxLength(hTag, hash, ds).c_str());
+          // this does not replace elements inside sequences
+          continue;
+        }
+      }
+      if (what == "hashuid" || what == "hash") {
+        if (ds.FindDataElement(hTag)) {
+          std::string val = sf.ToString(hTag);
+
+	  // Question: What happens if the string exists and is empty? In that case we get the same hash value for
+	  // studies that should be different (PACS wants to have unique numbers). Lets check if that is the case.
+	  // Question: What if the string is not empty but contains a string that is not unique (like "1"). In that
+	  // case the PACS might assume that the request id is the same, but the patient info does not match resulting
+	  // in a mismatch error.
+	  // For now we replace the StudyID with the hash of the StudyInstanceUID - ALWAYS.
+	  if (which == "StudyID") {
+	    // if this is the case replace the StudyID with the hash from the StudyInstanceUID
+	    val = trueStudyInstanceUID + params->projectname;
+	    //fprintf(stderr, "WARNING: OUR StudyID tag was empty, now it is: \"%s\"\n", val.c_str());
+	  }
+
+          std::string hash = "";
+          if (params->old_style_uid) {
+            hash = SHA256::digestString(val).toHex();
+          } else {
+            SHA256::digest a = SHA256::digestString(val);
+            hash = toDec(a.data, a.size);            
+          }
+
+          if (which == "SOPInstanceUID") // keep a copy as the filename for the output
+            filenamestring = hash.c_str();
+
+          if (which == "SeriesInstanceUID")
+            seriesdirname = hash.c_str();
+
+          if (which == "SeriesInstanceUID") {
+            // we want to keep a mapping of the old and new study instance uids
+	    params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+          }
+
+          if (which == "StudyInstanceUID") {
+            if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+              // fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
+              val = trueStudyInstanceUID;
+              if (what == "hashuid") { // with root
+                hash = betterUID(val);
+              } else { // if we can use the hash instead, no root infront
+                if (params->old_style_uid) {
+                  hash = SHA256::digestString(val).toHex();
+                } else {
+                  SHA256::digest a = SHA256::digestString(val);
+                  hash = toDec(a.data, a.size);
+                }
+              }
+            }
+          }
+
+          anon.Replace(hTag, limitToMaxLength(hTag, hash, ds).c_str());
+          continue;
+        }
+      }
+      if (what == "keep") {
+        // so we do nothing...
+        continue;
+      }
+      if (what == "incrementdate") {
+        if (ds.FindDataElement(hTag)) {
+          int nd = params->dateincrement;
+          std::string val = sf.ToString(hTag);
+          // parse the date string YYYYMMDD
+          struct sdate date1;
+          if (sscanf(val.c_str(), "%04ld%02ld%02ld", &date1.y, &date1.m, &date1.d) == 3) {
+            // replace with added value
+            long c = gday(date1) + nd;
+            struct sdate date2 = dtf(c);
+            char dat[256];
+            snprintf(dat, 256, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
+            // fprintf(stdout, "found a date : %s, replace with date: %s\n",
+            // val.c_str(), dat);
+            anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
+          } else {
+            // could not read the date here, just remove instead
+            // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
+            // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
+            // which.c_str(), filename);
+
+            // The issue with empty dates is that we cannot get those back from the research PACS, we should instead use some
+            // default dates to cover these cases. What is a good date range for this? Like any date in a specific year?
+            std::string fixed_year("1970");
+            int variable_month = (rand() % 12) + 1;
+            int day = 1;
+            char dat[256];
+            snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
+            // fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
+            anon.Replace(hTag, dat);
+          }
+          continue;
+        }
+      }
+      if (what == "incrementdatetime") {
+        //fprintf(stderr, "FOUND an increemntdatetime field\n");fflush(stderr);
+        if (isPrivateTag?ds.FindDataElement(phTag):ds.FindDataElement(hTag)) {
+	  //fprintf(stderr, "inside find data element\n");
+          int nd = params->dateincrement;
+	  gdcm::DataElement de1 = ds.GetDataElement( hTag );
+	  const gdcm::ByteValue *bv4 = de1.GetByteValue();
+
+	  //if ( de1.IsEmpty() ) {
+	  //  fprintf(stdout, "de1 is empty\n");
+	  //}
+	  
+	  /*if ( de1.GetVL() ) {
+	    fprintf(stdout, "got a value length\n");
+	    const gdcm::Value& v = de1.GetValue();
+	    const gdcm::ByteValue &bv = dynamic_cast<const gdcm::ByteValue&>(v);
+	    gdcm::Element<gdcm::VR::DT,1> e;
+	    const void *array = bv.GetVoidPointer();
+	    //memcpy( (void*)(&e), array, e.GetLength() * sizeof( gdcm::VRToType<gdcm::VR::DT>::Type) );
+	  }
+	  if (bv4) {
+	    std::string bla = std::string(bv4->GetPointer(), bv4->GetLength() );
+	    fprintf(stdout, "VALUE :  \"%s\" length: %ud\n", bla.c_str(), (unsigned int)bv4->GetLength());
+	    }*/
+	  //std::cout << de1 << std::endl;
+	  
+          std::string val = sf.ToString(hTag);
+	  //fprintf(stdout, "VALUE FOUND IS : \"%s\"\n", val.c_str());fflush(stdout);
+          // parse the date string YYYYMMDDHHMMSS
+          struct sdate date1;
+          char t[248];
+	  // based on the standard components of DT can be empty (null components), but we already have a YYYY
+	  int numParsedDateObjects = sscanf(val.c_str(), "%04ld%02ld%02ld%s", &date1.y, &date1.m, &date1.d, t);
+          if (numParsedDateObjects == 4) {
+            // replace with added value
+            long c = gday(date1) + nd;
+            struct sdate date2 = dtf(c);
+            char dat[256];
+            // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+            snprintf(dat, 256, "%04ld%02ld%02ld%s", date2.y, date2.m, date2.d, t);
+            fprintf(stdout, "found a date : %s, replace with date: %s\n", val.c_str(), dat);
+	    if (isPrivateTag) {
+	      // anon.Replace(hTag, dat);
+	      // instead of the above we need to do this for private tags
+	      de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+	      ds.Replace( de1 );
+	    } else {
+	      anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
+	    }
+          } else if ( numParsedDateObjects == 3) { // assume that t is empty
+            // replace with added value
+            long c = gday(date1) + nd;
+            struct sdate date2 = dtf(c);
+            char dat[256];
+            // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+            snprintf(dat, 256, "%04ld%02ld%02ld", date2.y, date2.m, date2.d);
+            fprintf(stdout, "found a date : %s, replace with date: %s\n", val.c_str(), dat);
+	    if (isPrivateTag) {
+	      // anon.Replace(hTag, dat);
+	      // instead of the above we need to do this for private tags
+	      de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+	      ds.Replace( de1 );
+	    } else {
+	      anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
+	    }
+          } else if ( numParsedDateObjects == 2) { // assume that t is empty
+            // replace with added value
+	    date1.d = 1;
+            long c = gday(date1) + nd;
+            struct sdate date2 = dtf(c);
+            char dat[256];
+            // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+            snprintf(dat, 256, "%04ld%02ld", date2.y, date2.m);
+            fprintf(stdout, "found a date : %s, replace with date: %s\n", val.c_str(), dat);
+	    if (isPrivateTag) {
+	      // anon.Replace(hTag, dat);
+	      // instead of the above we need to do this for private tags
+	      de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+	      ds.Replace( de1 );
+	    } else {
+	      anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
+	    }
+          } else if ( numParsedDateObjects == 1) { // assume that t is empty
+            // replace with added value
+	    date1.d = 1;
+	    date1.m = 1;
+            long c = gday(date1) + nd;
+            struct sdate date2 = dtf(c);
+            char dat[256];
+            // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+            snprintf(dat, 256, "%04ld", date2.y);
+            fprintf(stdout, "found a date : %s, replace with date: %s\n", val.c_str(), dat);
+	    if (isPrivateTag) {
+	      // anon.Replace(hTag, dat);
+	      // instead of the above we need to do this for private tags
+	      de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+	      ds.Replace( de1 );
+	    } else {
+	      anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
+	    }
+	  } else {
+            // could not read the date here, just remove instead
+            fprintf(stdout, "Warning: could not parse a date (\"%s\", %x,%x, %s) in %s, remove field instead...\n", val.c_str(), a, b,which.c_str(), filename.c_str());
+
+            // TODO: We should try harder here. The day and month might be missing components
+            // and we still have a DT field that is valid (null components).
+            anon.Replace(hTag, "");
+          }
+          continue;
+        }
+      }
+      if (what == "YES") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, "YES");
+        continue;
+      }
+      if (what == "MODIFIED") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, "MODIFIED");
+        continue;
+      }
+      if (what == "PROJECTNAME") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->projectname, ds).c_str());
+        continue;
+      }
+      if (what == "SITENAME") {
+        if (ds.FindDataElement(hTag))
+          anon.Replace(hTag, limitToMaxLength(hTag, params->sitename, ds).c_str());
+        continue;
+      }
+      // Some entries have Re-Mapped, that could be a name on the command line or,
+      // by default we should hash the id
+      // fprintf(stdout, "Warning: set to what: %s %s which: %s what: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str());
+      // fallback, if everything fails we just use the which and set that's field value
+      if (ds.FindDataElement(hTag))
+        anon.Replace(hTag, limitToMaxLength(hTag, what, ds).c_str());
+  }
+  return;
+}
+
 void *ReadFilesThread(void *voidparams) {
   threadparams *params = static_cast<threadparams *>(voidparams);
   gdcm::Global gl;
@@ -1342,6 +1740,8 @@ void *ReadFilesThread(void *voidparams) {
         const gdcm::DataElement &de = (*cit);
         (*cit).GetValue().Print(strm);
         modalitystring = strm.str();
+	modalitystring.erase(modalitystring.find_last_not_of(" \n\r\t")+1);
+	// trim(modalitystring);
         break;
       }
     }
@@ -1407,9 +1807,8 @@ void *ReadFilesThread(void *voidparams) {
         hTag = gdcm::PrivateTag(a,b);
       }
 
-
       // if 'a' is a private tag we need to use gdcm::PrivateTag(a,b) here!
-      if (!ds.FindDataElement(hTag)) {
+      if (hTag.IsPrivate()?!ds.FindDataElement(gdcm::PrivateTag(a,b)):!ds.FindDataElement(hTag)) {
 
         // if the inserted element is a sequence we need to do more
         // Example
@@ -1491,6 +1890,10 @@ void *ReadFilesThread(void *voidparams) {
     // gdcm::AddTag(gdcm::Tag(0x65010010), gdcm::VR::LO, "MY NEW DATASET", reader.GetFile().GetDataSet());
 
     // now walk through the list of entries and apply each one to the current ds
+    // TODO: move this into its own function (done)
+    applyWork(anon, params, trueStudyInstanceUID, filename, filenamestring, seriesdirname);
+
+    /*
     for (int i = 0; i < work.size(); i++) {
       // fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
       std::string tag1(work[i][0]);
@@ -1503,23 +1906,11 @@ void *ReadFilesThread(void *voidparams) {
       }
       int a = strtol(tag1.c_str(), NULL, 16);
       int b = strtol(tag2.c_str(), NULL, 16);
-      // fprintf(stdout, "Tag: %s %04X %04X\n", which.c_str(), a, b);
-      // if we don't have this dataelement, don't do anything
-      /*if (!ds.FindDataElement(gdcm::Tag(a, b))) {
-        // In some cases we need to create the element, like if
-        // we receive that value on the command line.
-        if (work[i].size() > 5 && (work[i][5] == "1" || work[i][5] == "createIfMissing")) {
-          // we add this entry so it can be written to further down
-          anon.Empty(gdcm::Tag(a, b)); // does not work
-        } else {
-          continue;
-        }
-      }*/
+
       gdcm::Tag hTag(a,b); // either hTag or phTag, better to use a union here
       gdcm::PrivateTag phTag;
       bool isPrivateTag = false;
       if (hTag.IsPrivate()) {
-	//fprintf(stderr, "looking now for a PRIVATE TAG AS %x %x %s\n", a, b, which.c_str());
         phTag = gdcm::PrivateTag(a,b,which.c_str()); // 0x71,0x22, "SIEMENS MED PT"
 	isPrivateTag = true;
       }
@@ -1530,7 +1921,7 @@ void *ReadFilesThread(void *voidparams) {
       if (work[i].size() > 4 && work[i][4] == "regexp") {
         regexp = true;
         // as a test print out what we got
-        if (ds.FindDataElement(isPrivateTag?phTag:hTag)) {
+        if (isPrivateTag?ds.FindDataElement(phTag):ds.FindDataElement(hTag)) {
           std::string val = sf.ToString(hTag);
           std::string ns("");
           try {
@@ -1758,20 +2149,6 @@ void *ReadFilesThread(void *voidparams) {
 	  //  fprintf(stdout, "de1 is empty\n");
 	  //}
 	  
-	  /*if ( de1.GetVL() ) {
-	    fprintf(stdout, "got a value length\n");
-	    const gdcm::Value& v = de1.GetValue();
-	    const gdcm::ByteValue &bv = dynamic_cast<const gdcm::ByteValue&>(v);
-	    gdcm::Element<gdcm::VR::DT,1> e;
-	    const void *array = bv.GetVoidPointer();
-	    //memcpy( (void*)(&e), array, e.GetLength() * sizeof( gdcm::VRToType<gdcm::VR::DT>::Type) );
-	  }
-	  if (bv4) {
-	    std::string bla = std::string(bv4->GetPointer(), bv4->GetLength() );
-	    fprintf(stdout, "VALUE :  \"%s\" length: %ud\n", bla.c_str(), (unsigned int)bv4->GetLength());
-	    }*/
-	  //std::cout << de1 << std::endl;
-	  
           std::string val = sf.ToString(hTag);
 	  //fprintf(stdout, "VALUE FOUND IS : \"%s\"\n", val.c_str());fflush(stdout);
           // parse the date string YYYYMMDDHHMMSS
@@ -1830,7 +2207,8 @@ void *ReadFilesThread(void *voidparams) {
       // fallback, if everything fails we just use the which and set that's field value
       if (ds.FindDataElement(hTag))
         anon.Replace(hTag, limitToMaxLength(hTag, what, ds).c_str());
-    }
+    } 
+    */
 
     // hash of the patient id
     if (params->patientid == "hashuid") {
@@ -1877,30 +2255,14 @@ void *ReadFilesThread(void *voidparams) {
     // this is a private tag --- does not work yet - we can only remove
     if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1010)))
       anon.Remove(gdcm::PrivateTag(0x0013, 0x1010));
-    /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1010), params->projectname.c_str())) {
-      gdcm::Trace::SetDebug( true );
-      gdcm::Trace::SetWarning( true );
-      bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1010)); // empty the field
-                                                       //      if (!ok)
-                                                       //        fprintf(stderr, "failed setting tags 0013,1010 to empty.\n");
-    }*/
+
     if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1013)))
       anon.Remove(gdcm::PrivateTag(0x0013, 0x1013));
-    /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1013), params->sitename.c_str())) {
-      bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1013));
-      //      if (!ok)
-      //        fprintf(stderr, "failed setting tags 0013,1013 to empty.\n");
-    }*/
+
     if (ds.FindDataElement(gdcm::PrivateTag(0x0013, 0x1011)))
       anon.Remove(gdcm::PrivateTag(0x0013, 0x1011));
     if (ds.FindDataElement(gdcm::PrivateTag(0x0013, 0x1012)))
       anon.Remove(gdcm::PrivateTag(0x0013, 0x1012));
-    /*if (!anon.Replace(gdcm::Tag(0x0013, 0x1012), params->sitename.c_str())) {
-      //fprintf(stderr, "Cannot set private tag 0013, 1012, try to set to 0\n");
-      bool ok = anon.Empty(gdcm::Tag(0x0013, 0x1012)); // could fail if the element does not exist
-      //      if (!ok)
-      //        fprintf(stderr, "failed setting tags 0013,1012 to empty.\n");
-    } */
 
     // ok save the file again
     std::string imageInstanceUID = filenamestring;
@@ -2030,6 +2392,8 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
     params[thread].sitename = sitename;
     params[thread].siteid = siteid;
     params[thread].old_style_uid = old_style_uid;
+    // params[thread].byThreadStudyInstanceUID
+    // params[thread].byThreadSeriesInstanceUID
     if (thread == nthreads - 1) {
       // There is slightly more files to process in this thread:
       params[thread].nfiles += nfiles % nthreads;
@@ -2126,30 +2490,30 @@ const option::Descriptor usage[] = {
      "the cancer imaging archive.\n\n"
      "USAGE: anonymize [options]\n\n"
      "Options:"},
-    {INPUT, 0, "i", "input", Arg::Required, "  --input, -i  \tInput directory."},
-    {OUTPUT, 0, "o", "output", Arg::Required, "  --output, -o  \tOutput directory."},
-    {PATIENTID, 0, "p", "patientid", Arg::Required, "  --patientid, -p  \tPatient ID after anonymization (default is \"hashuid\" to hash the existing id)."},
-    {EVENTNAME, 0, "e", "eventname", Arg::Required, "  --eventname, -e  \tEvent name string (default is \"\")."},
-    {PROJECTNAME, 0, "j", "projectname", Arg::Required, "  --projectname, -j  \tProject name. By default the project name is copied to the InstitutionName tag as well as tags in group 12."},
+    {INPUT,         0, "i", "input", Arg::Required, "  --input, -i  \tInput directory."},
+    {OUTPUT,        0, "o", "output", Arg::Required, "  --output, -o  \tOutput directory."},
+    {PATIENTID,     0, "p", "patientid", Arg::Required, "  --patientid, -p  \tPatient ID after anonymization (default is \"hashuid\" to hash the existing id)."},
+    {EVENTNAME,     0, "e", "eventname", Arg::Required, "  --eventname, -e  \tEvent name string (default is \"\")."},
+    {PROJECTNAME,   0, "j", "projectname", Arg::Required, "  --projectname, -j  \tProject name. By default the project name is copied to the InstitutionName tag as well as tags in group 12."},
     {SITENAME, 0, "s", "sitename", Arg::Required, "  --sitename, -s  \tSiteName DICOM tag."},
-    {SITEID, 0, "w", "siteid", Arg::Required, "  --siteid, -w  \tSiteID DICOM tag."},
+    {SITEID,        0, "w", "siteid", Arg::Required, "  --siteid, -w  \tSiteID DICOM tag."},
     {DATEINCREMENT, 0, "d", "dateincrement", Arg::Required, "  --dateincrement, -d  \tNumber of days that should be added to dates."},
-    {EXPORTANON, 0, "a", "exportanon", Arg::Required,
+    {EXPORTANON,    0, "a", "exportanon", Arg::Required,
      "  --exportanon, -a  \tWrites the anonymization structure as a json file "
      "to disk and quits the program. There is no way to import a new file currently."},
-    {BYSERIES, 0, "b", "byseries", Arg::None,
+    {BYSERIES,      0, "b", "byseries", Arg::None,
      "  --byseries, -b  \tFlag to writes each DICOM file into a separate directory "
      "by image series."},
-    {OLDSTYLEUID, 0, "u", "oldstyleuid", Arg::None,
+    {OLDSTYLEUID,   0, "u", "oldstyleuid", Arg::None,
      "  --oldstyleuid, -u  \tFlag to allow alpha-numeric characters as UIDs (deprecated). Default is to only generate standard conformant UIDs with characters '0'-'9' and '.'."},
-    {STOREMAPPING, 0, "m", "storemapping", Arg::None, "  --storemapping, -m  \tFlag to store the StudyInstanceUID mapping as a JSON file."},
-    {TAGCHANGE, 0, "P", "tagchange", Arg::Required, "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
-    {REGTAGCHANGE, 0, "R", "regtagchange", Arg::Required,
+    {STOREMAPPING,  0, "m", "storemapping", Arg::None, "  --storemapping, -m  \tFlag to store the StudyInstanceUID mapping as a JSON file."},
+    {TAGCHANGE,     0, "P", "tagchange", Arg::Required, "  --tagchange, -P  \tChanges the default behavior for a tag in the build-in rules."},
+    {REGTAGCHANGE,  0, "R", "regtagchange", Arg::Required,
      "  --regtagchange, -R  \tChanges the default behavior for a tag in the build-in rules (understands regular expressions, retains all capturing groups)."},
-    {NUMTHREADS, 0, "t", "numthreads", Arg::Required, "  --numthreads, -t  \tHow many threads should be used (default 4)."},
-    {VERSION, 0, "v", "version", Arg::None, "  --version, -v  \tPrint version number."},
-    {VERBOSE, 0, "l", "debug", Arg::None, "  --debug, -l  \tPrint debug messages. Can be used more than once."},
-    {UNKNOWN, 0, "", "", Arg::None,
+    {NUMTHREADS,    0, "t", "numthreads", Arg::Required, "  --numthreads, -t  \tHow many threads should be used (default 4)."},
+    {VERSION,       0, "v", "version", Arg::None, "  --version, -v  \tPrint version number."},
+    {VERBOSE,       0, "l", "debug", Arg::None, "  --debug, -l  \tPrint debug messages. Can be used more than once."},
+    {UNKNOWN,       0, "", "", Arg::None,
      "\nExamples:\n"
      "  anonymize --input directory --output directory --patientid bla -d 42 -b\n"
      "  anonymize --exportanon rules.json\n"
