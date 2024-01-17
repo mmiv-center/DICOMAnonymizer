@@ -23,6 +23,7 @@
 #include "gdcmStringFilter.h"
 #include "gdcmSystem.h"
 #include "gdcmWriter.h"
+#include "gdcmPrivateTag.h"
 #include "json.hpp"
 #include "optionparser.h"
 #include <gdcmUIDGenerator.h>
@@ -893,7 +894,10 @@ nlohmann::json work = nlohmann::json::array({
     {"0033", "101c", "SomeSiemensMITRA",                    "remove"},
     {"0009", "1001", "SectraIdentRequestID",                "remove"},     // if 0009,0010 is SECTRA_Ident_01
     {"0009", "1002", "SectraIdentExaminationID",            "remove"}, // if 0009,0010 is SECTRA_Ident_01
+    {"0071", "1022", "SIEMENS MED PT",                      "incrementdatetime"},
 });
+
+
 
 std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm::DataSet& ds) {
   const gdcm::DataElement& de = ds.GetDataElement(t);
@@ -937,8 +941,8 @@ std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm:
   if (str_in.length() > max_l) {
     std::string str_limited = str_in.substr(0, max_l);
     if (debug_level > 0)
-      fprintf(stderr, "Warning: tag value too long (%zu), max: %u for VR: %s, will be truncated.\n",
-              str_in.length(), max_l, gdcm::VR::GetVRString(vr));
+      fprintf(stderr, "Warning: tag (%x,%x) value too long (%zu), max: %u for VR: %s, will be truncated.\n",
+              t.GetGroup(), t.GetElement(), str_in.length(), max_l, gdcm::VR::GetVRString(vr));
     return str_limited;
   }
 
@@ -1046,7 +1050,20 @@ std::string betterUID(std::string val, bool old_style_uid=false) {
 
 
 // anonymizes only two levels in a sequence
+// TODO: we should go down recursively in this list (done)
+// TODO: we should edit the content using the same method we edit the content for non-sequences (work loop should be function)
 void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqur) {
+  // TODO: change fields inside sequence (DT)
+  // (0054,0016) SQ (Sequence with undefined length #=1)     # u/l, 1 RadiopharmaceuticalInformationSequence
+  //   (fffe,e000) na (Item with explicit length #=9)          # 434, 1 Item
+  //     (0018,0031) LO [Fluorodeoxyglucose]                     #  18, 1 Radiopharmaceutical
+  //     (0018,1072) TM [084400.000000]                          #  14, 1 RadiopharmaceuticalStartTime
+  //     (0018,1074) DS [265000000]                              #  10, 1 RadionuclideTotalDose
+  //     (0018,1075) DS [6586.2]                                 #   6, 1 RadionuclideHalfLife
+  //     (0018,1076) DS [0.9673]                                 #   6, 1 RadionuclidePositronFraction
+  //     (0018,1078) DT [20190724084400.000000]                  #  22, 1 RadiopharmaceuticalStartDateTime
+  //     (0018,1079) DT [20190724084400.000000]                  #  22, 1 RadiopharmaceuticalStopDateTime
+
   gdcm::DataElement squr = dss->GetDataElement(*tsqur);
   // gdcm::DataElement squr = *squrP;
   gdcm::SmartPointer<gdcm::SequenceOfItems> sqi = squr.GetValueAsSQ();
@@ -1081,7 +1098,29 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
           isSequence = true;
         }
       }
+      // make this recursive - if we have a sequence
+      //         anonymizeSequence(params, &dss, &tt);
+      if (isSequence) {
+        anonymizeSequence(params, &nestedds, tsqur);
 
+	
+	/*        gdcm::DataElement ppp2 = de;
+        ppp2.SetVLToUndefined();
+        gdcm::SmartPointer<gdcm::SequenceOfItems> seq = ppp2.GetValueAsSQ();
+        if (seq && seq->GetNumberOfItems()) {
+          for (int i = 1; i <= seq->GetNumberOfItems(); i++) {
+            gdcm::Item &item2 = seq->GetItem(i);
+            gdcm::DataSet &nestedds2 = item2.GetNestedDataSet(); // only items with value representation SQ might contain nested datasets
+            if (nestedds2.Size() == 0)                           // speed up if there is nothing in there, don't try to anonymize
+              continue;
+	    anonymizeSequence(params, &nestedds2, tsqur);
+	  }
+          nestedds.Replace(ppp2);
+	  } */
+	return; // we should have done our work here
+      }
+
+      // always true
       if (!isSequence) {
         // fprintf(stdout, "in itemIdx %04x,%04x this is not a sequence\n", tt.GetGroup(), tt.GetElement());
 
@@ -1134,7 +1173,7 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
             }
           }
         }
-      } else { // we have a sequence, lets go in and change all values
+      } /* else { // we have a sequence, lets go in and change all values
         // make a copy of the whole thing and set to VL undefined
         gdcm::DataElement ppp2 = de;
         ppp2.SetVLToUndefined();
@@ -1173,13 +1212,6 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
                 if (bv != NULL) {
                   std::string dup(bv->GetPointer(), bv->GetLength());
                   std::string hash = betterUID(dup + params->projectname, params->old_style_uid);
-                  /*if (params->old_style_uid) {
-                    hash = SHA256::digestString(dup + params->projectname).toHex();
-                  } else {
-                    SHA256::digest a = SHA256::digestString(dup + params->projectname);
-                    hash = toDec(a.data, a.size);
-                  }*/
-
                   std::string hash_limited = limitToMaxLength(aa, hash, *dss);
                   // fprintf(stdout, "replace one value!!!! %s\n", hash.c_str());
                   cm.SetByteValue(hash_limited.c_str(), (uint32_t)hash_limited.size());
@@ -1188,13 +1220,13 @@ void anonymizeSequence(threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqu
                   // valid for ReferencedSOPInstanceUID
                   nestedds2.Replace(cm);
                 }
-              }
+		}
               // END REPLACE
             }
-          }
+          } 
           nestedds.Replace(ppp2);
         }
-      }
+      }*/
       ++it;
     }
 
@@ -1401,7 +1433,7 @@ void *ReadFilesThread(void *voidparams) {
           gdcm::Item it;
           it.SetVLToUndefined(); // Needed to not popup error message
 
-          gdcm::DataElement de2(gdcm::Tag(0x0008, 0x0104));
+         gdcm::DataElement de2(gdcm::Tag(0x0008, 0x0104));
           std::string aaa = "Software"; // CodeMeaning
           //size_t len = aaa.size();
           //char *buf = new char[len];
@@ -1483,9 +1515,13 @@ void *ReadFilesThread(void *voidparams) {
           continue;
         }
       }*/
-      gdcm::Tag hTag(a,b);
+      gdcm::Tag hTag(a,b); // either hTag or phTag, better to use a union here
+      gdcm::PrivateTag phTag;
+      bool isPrivateTag = false;
       if (hTag.IsPrivate()) {
-        hTag = gdcm::PrivateTag(a,b);
+	//fprintf(stderr, "looking now for a PRIVATE TAG AS %x %x %s\n", a, b, which.c_str());
+        phTag = gdcm::PrivateTag(a,b,which.c_str()); // 0x71,0x22, "SIEMENS MED PT"
+	isPrivateTag = true;
       }
 
       if (which == "DeIdentificationMethodCodeSequence")
@@ -1494,7 +1530,7 @@ void *ReadFilesThread(void *voidparams) {
       if (work[i].size() > 4 && work[i][4] == "regexp") {
         regexp = true;
         // as a test print out what we got
-        if (ds.FindDataElement(hTag)) {
+        if (ds.FindDataElement(isPrivateTag?phTag:hTag)) {
           std::string val = sf.ToString(hTag);
           std::string ns("");
           try {
@@ -1513,7 +1549,7 @@ void *ReadFilesThread(void *voidparams) {
           }
           // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
           // ns.c_str());
-          anon.Replace(hTag, limitToMaxLength(hTag, ns, ds).c_str());
+          anon.Replace(isPrivateTag?phTag:hTag, limitToMaxLength(hTag, ns, ds).c_str());
         }
         continue;
       }
@@ -1711,9 +1747,33 @@ void *ReadFilesThread(void *voidparams) {
         }
       }
       if (what == "incrementdatetime") {
-        if (ds.FindDataElement(hTag)) {
+        //fprintf(stderr, "FOUND an increemntdatetime field\n");fflush(stderr);
+        if (isPrivateTag?ds.FindDataElement(phTag):ds.FindDataElement(hTag)) {
+	  //fprintf(stderr, "inside find data element\n");
           int nd = params->dateincrement;
+	  gdcm::DataElement de1 = ds.GetDataElement( hTag );
+	  const gdcm::ByteValue *bv4 = de1.GetByteValue();
+
+	  //if ( de1.IsEmpty() ) {
+	  //  fprintf(stdout, "de1 is empty\n");
+	  //}
+	  
+	  /*if ( de1.GetVL() ) {
+	    fprintf(stdout, "got a value length\n");
+	    const gdcm::Value& v = de1.GetValue();
+	    const gdcm::ByteValue &bv = dynamic_cast<const gdcm::ByteValue&>(v);
+	    gdcm::Element<gdcm::VR::DT,1> e;
+	    const void *array = bv.GetVoidPointer();
+	    //memcpy( (void*)(&e), array, e.GetLength() * sizeof( gdcm::VRToType<gdcm::VR::DT>::Type) );
+	  }
+	  if (bv4) {
+	    std::string bla = std::string(bv4->GetPointer(), bv4->GetLength() );
+	    fprintf(stdout, "VALUE :  \"%s\" length: %ud\n", bla.c_str(), (unsigned int)bv4->GetLength());
+	    }*/
+	  //std::cout << de1 << std::endl;
+	  
           std::string val = sf.ToString(hTag);
+	  //fprintf(stdout, "VALUE FOUND IS : \"%s\"\n", val.c_str());fflush(stdout);
           // parse the date string YYYYMMDDHHMMSS
           struct sdate date1;
           char t[248];
@@ -1724,14 +1784,18 @@ void *ReadFilesThread(void *voidparams) {
             char dat[256];
             // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
             snprintf(dat, 256, "%04ld%02ld%02ld%s", date2.y, date2.m, date2.d, t);
-            // fprintf(stdout, "found a date : %s, replace with date: %s\n",
-            // val.c_str(), dat);      
-            anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
+            fprintf(stdout, "found a date : %s, replace with date: %s\n", val.c_str(), dat);
+	    if (isPrivateTag) {
+	      // anon.Replace(hTag, dat);
+	      // instead of the above we need to do this for private tags
+	      de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+	      ds.Replace( de1 );
+	    } else {
+	      anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
+	    }
           } else {
             // could not read the date here, just remove instead
-            // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
-            // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
-            // which.c_str(), filename);
+            fprintf(stdout, "Warning: could not parse a date (\"%s\", %x,%x, %s) in %s, remove field instead...\n", val.c_str(), a, b,which.c_str(), filename);
 
             // TODO: We should try harder here. The day and month might be missing components
             // and we still have a DT field that is valid (null components).
