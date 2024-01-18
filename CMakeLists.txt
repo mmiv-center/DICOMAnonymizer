@@ -4,11 +4,11 @@ project (anonymize)
 
 # set (CMAKE_CXX_STANDARD 11)
 IF("${CMAKE_SYSTEM}" MATCHES "Linux")
-   set (CMAKE_CXX_STANDARD 17)
-   SET(CMAKE_CXX_FLAGS "-std=c++17 -I/usr/local/include -I/usr/include")
+   set (CMAKE_CXX_STANDARD 20)
+   SET(CMAKE_CXX_FLAGS "-std=c++20 -I/usr/local/include -I/usr/include")
 ELSE()
    # find the correct path for isysroot with `xcrun --show-sdk-path`
-   SET(CMAKE_CXX_FLAGS "-std=c++17 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
+   SET(CMAKE_CXX_FLAGS "-std=c++20 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I/usr/local/include")
 ENDIF()
 
 # add a date stamp to the version string
