@@ -899,7 +899,7 @@ nlohmann::json work = nlohmann::json::array({
 
 
 
-std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm::DataSet& ds) {
+std::string limitToMaxLength(gdcm::Tag t, std::string& str_in, const gdcm::DataSet& ds) {
   const gdcm::DataElement& de = ds.GetDataElement(t);
   gdcm::VR vr = de.GetVR();
   std::string VRName = gdcm::VR::GetVRString(vr);
@@ -907,6 +907,14 @@ std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm:
   if (VRName == "??") // don't know, do nothing
     return str_in;
 
+  if (str_in.size()%2!=0) { // odd length for this value, make even length by adding null or space
+    if (VRName != "UI") { 
+      str_in += " ";
+    } else { // but what about binary, this is only is isASCII
+      str_in += '\0';
+    }
+  }
+  
   std::unordered_map<std::string, uint32_t> max_lengths = {
     {"AE", 16},
     {"AS", 4},
@@ -933,6 +941,9 @@ std::string limitToMaxLength(gdcm::Tag t, const std::string& str_in, const gdcm:
   auto max_length_it = max_lengths.find(VRName);
   if (max_length_it == max_lengths.end())
     return str_in; // do nothing
+
+  // some elements need a space to get to even length, some need a null byte
+  // see: https://dicom.nema.org/dicom/2013/output/chtml/part05/sect_6.2.html
 
   uint32_t max_l = max_length_it->second;
   if (max_l == 0)
@@ -1139,8 +1150,9 @@ void applyWork(gdcm::Anonymizer &anon,
               ns = std::string("FIONA: no match on regular expression");
             }
           } catch (std::regex_error &e) {
-            fprintf(stderr, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
-                    what.c_str(), val.c_str(), ns.c_str());
+	    if (debug_level > 0)
+	      fprintf(stderr, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
+		      what.c_str(), val.c_str(), ns.c_str());
           }
           // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
           // ns.c_str());
@@ -1302,6 +1314,11 @@ void applyWork(gdcm::Anonymizer &anon,
 
           //if (ds.FindDataElement(gdcm::Tag(a, b)))
 	  hash = limitToMaxLength(hTag, hash, ds);
+	  // SetByteValue will complain if we try to add an odd length hash
+	  // but if we write a UID with a space we will get complains later if we want to read them... hmm..
+	  //if (hash.size()%2!=0)
+	  //  hash += " ";
+	  
 	  de1.SetByteValue( hash.c_str(), (uint32_t)hash.size() );
 	  ds.Replace( de1 );
 	  
@@ -1498,7 +1515,8 @@ void applyWork(gdcm::Anonymizer &anon,
             char dat[256];
             // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
             snprintf(dat, 256, "%04ld%02ld%02ld", date1.y, date1.m, date1.d);
-            fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
+	    if (debug_level > 0)
+	      fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
 	    de1.SetByteValue( dat, (uint32_t)strlen(dat) );
 	    ds.Replace( de1 );
           } else if ( numParsedDateObjects == 2) { // assume that t is empty
@@ -1511,7 +1529,8 @@ void applyWork(gdcm::Anonymizer &anon,
             char dat[256];
             // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
             snprintf(dat, 256, "%04ld%02ld", date1.y, date1.m);
-            fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
+	    if (debug_level > 0)
+	      fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
 	    de1.SetByteValue( dat, (uint32_t)strlen(dat) );
 	    ds.Replace( de1 );
           } else if ( numParsedDateObjects == 1) { // assume that t is empty
@@ -1524,12 +1543,14 @@ void applyWork(gdcm::Anonymizer &anon,
             char dat[256];
             // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
             snprintf(dat, 256, "%04ld", date1.y);
-            fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
+	    if (debug_level > 0)
+	      fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
 	    de1.SetByteValue( dat, (uint32_t)strlen(dat) );
 	    ds.Replace( de1 );
 	  } else {
             // could not read the date here, just remove instead
-            fprintf(stdout, "Warning: could not parse date (\"%s\", %04x,%04x, %s) in %s, remove field instead...\n", val.c_str(), a, b,which.c_str(), filename.c_str());
+	    if (debug_level > 0)
+	      fprintf(stdout, "Warning: could not parse date (\"%s\", %04x,%04x, %s) in %s, remove field instead...\n", val.c_str(), a, b,which.c_str(), filename.c_str());
 
             // TODO: We should try harder here. The day and month might be missing components
             // and we still have a DT field that is valid (null components).
@@ -1608,6 +1629,8 @@ void applyWork(gdcm::Anonymizer &anon,
       if (isPrivateTag?ds.FindDataElement(phTag):ds.FindDataElement(hTag)) {
 	  gdcm::DataElement de1 = ds.GetDataElement( hTag );
 	  std::string val = limitToMaxLength(hTag, what, ds);
+	  if ( val.size()%2 != 0 )
+	    val += " ";
 	  de1.SetByteValue( val.c_str(), (uint32_t)val.size() );
 	  ds.Replace( de1 );
       }
@@ -1620,7 +1643,7 @@ void applyWork(gdcm::Anonymizer &anon,
 // anonymizes only two levels in a sequence
 // TODO: we should go down recursively in this list (done)
 // TODO: we should edit the content using the same method we edit the content for non-sequences (work loop should be function)
-void anonymizeSequence(gdcm::Anonymizer &anon, const std::string trueStudyInstanceUID, threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqur) {
+void anonymizeSequence(gdcm::Anonymizer &anon, const std::string trueStudyInstanceUID, threadparams *params, gdcm::DataSet *dss, gdcm::Tag *tsqur, int level) {
   // TODO: change fields inside sequence (DT)
   // (0054,0016) SQ (Sequence with undefined length #=1)     # u/l, 1 RadiopharmaceuticalInformationSequence
   //   (fffe,e000) na (Item with explicit length #=9)          # 434, 1 Item
@@ -1633,8 +1656,12 @@ void anonymizeSequence(gdcm::Anonymizer &anon, const std::string trueStudyInstan
   //     (0018,1079) DT [20190724084400.000000]                  #  22, 1 RadiopharmaceuticalStopDateTime
 
   // this tsqur tag is the tag of the current sequence, we need to look at its items next
+  std::string spaces(level, ' ');
+  if (debug_level > 0)
+    fprintf(stdout, "%sin anonymizeSequence for tag %04x,%04x\n", spaces.c_str(), (*tsqur).GetGroup(), (*tsqur).GetElement());
   
   gdcm::DataElement squr = dss->GetDataElement(*tsqur);
+  squr.SetVLToUndefined();
   // gdcm::DataElement squr = *squrP;
   gdcm::SmartPointer<gdcm::SequenceOfItems> sqi = squr.GetValueAsSQ();
   if (!sqi || !sqi->GetNumberOfItems()) {
@@ -1645,6 +1672,9 @@ void anonymizeSequence(gdcm::Anonymizer &anon, const std::string trueStudyInstan
   // sequences lowest level
   int itemIdx = 0;
   for (itemIdx = 1; itemIdx <= sqi->GetNumberOfItems(); itemIdx++) { // for each item do
+    if (debug_level > 0)
+      fprintf(stdout, "%s item %d %04x,%04x\n", spaces.c_str(), itemIdx, (*tsqur).GetGroup(), (*tsqur).GetElement());
+
     // normally we only find a single item here, could be more
     gdcm::Item &item = sqi->GetItem(itemIdx);
     gdcm::DataSet &nestedds = item.GetNestedDataSet();
@@ -1658,6 +1688,9 @@ void anonymizeSequence(gdcm::Anonymizer &anon, const std::string trueStudyInstan
     while (it != copy_nestedds.End()) { 
       const gdcm::DataElement &de = *it;
       gdcm::Tag tt = de.GetTag(); // this is the current tag in this nested sequence
+      if (debug_level > 0) {
+	fprintf(stdout, "%s  %04x,%04x in sequence\n", spaces.c_str(), tt.GetGroup(), tt.GetElement());fflush(stdout);
+      }
       bool isSequence = false;
       if (nestedds.FindDataElement(tt)) {
         const gdcm::DataElement &de_orig = nestedds.GetDataElement(tt);
@@ -1669,7 +1702,8 @@ void anonymizeSequence(gdcm::Anonymizer &anon, const std::string trueStudyInstan
       }
 
       if (isSequence) {
-        anonymizeSequence(anon, trueStudyInstanceUID, params, &nestedds, &tt);
+        anonymizeSequence(anon, trueStudyInstanceUID, params, &nestedds, &tt, level+4);
+	//nestedds.Replace(de);
 	// should this a continue?
 	// continue;
 	//return; // we should have done our work here
@@ -1705,13 +1739,13 @@ void anonymizeSequence(gdcm::Anonymizer &anon, const std::string trueStudyInstan
           //  continue; // we can only do this inside a sequence, would be good if we can do more inside sequences!!!!
           int a = strtol(tag1.c_str(), NULL, 16);
           int b = strtol(tag2.c_str(), NULL, 16);
-          gdcm::Tag aa(a, b); // now works
+          //gdcm::Tag aa(a, b); // now works
           if (tt.GetGroup() != a || tt.GetElement() != b) {
             continue;
           }
-          if (aa.IsPrivate()) { // I don't think this works. aa is still just a gdcm::Tag.
-            aa = gdcm::PrivateTag(a,b);
-          }
+          //if (aa.IsPrivate()) { // I don't think this works. aa is still just a gdcm::Tag.
+          //  aa = gdcm::PrivateTag(a,b);
+          //}
 	  applyWork(anon, nestedds, wi, params, trueStudyInstanceUID, filename, filenamestring, seriesdirname);
 	  /*
           // fprintf(stdout, "Found a tag: %s, %s\n", tag1.c_str(), tag2.c_str());
@@ -1841,6 +1875,8 @@ void anonymizeSequence(gdcm::Anonymizer &anon, const std::string trueStudyInstan
   squr_dup.SetValue(*sqi);
   squr_dup.SetVLToUndefined();
   dss->Replace(squr_dup);
+  if (debug_level > 0)
+    fprintf(stdout, "%sanonymizeSequence done for tag %04x,%04x\n", spaces.c_str(), (*tsqur).GetGroup(), (*tsqur).GetElement());  
   return;
 }
 
@@ -1938,7 +1974,7 @@ void *ReadFilesThread(void *voidparams) {
       gdcm::SmartPointer<gdcm::SequenceOfItems> seq = de.GetValueAsSQ();
       if (seq && seq->GetNumberOfItems()) {
         // fprintf(stdout, "Found sequence in: %04x, %04x for file %s\n", tt.GetGroup(), tt.GetElement(), filename);
-        anonymizeSequence(anon, trueStudyInstanceUID, params, &dss, &tt);
+        anonymizeSequence(anon, trueStudyInstanceUID, params, &dss, &tt, 0);
       }
       ++it;
     }
@@ -2047,9 +2083,9 @@ void *ReadFilesThread(void *voidparams) {
 
     std::string filenamestring = "";
     std::string seriesdirname = ""; // only used if byseries is true
-    //gdcm::Trace::SetDebug(true);
-    //gdcm::Trace::SetWarning(true);
-    //gdcm::Trace::SetError(true);
+    gdcm::Trace::SetDebug(true);
+    gdcm::Trace::SetWarning(true);
+    gdcm::Trace::SetError(true);
 
     // lets add the private group entries
     // gdcm::AddTag(gdcm::Tag(0x65010010), gdcm::VR::LO, "MY NEW DATASET", reader.GetFile().GetDataSet());
@@ -2737,7 +2773,7 @@ int main(int argc, char *argv[]) {
 
   std::string input;
   std::string output;
-  std::string patientID = "hashuid"; // mark the default value as hash the existing uids for patientID and patientName
+  std::string patientID = ""; // if no patient id is provided in the command line use and empty string
   std::string sitename = " ";
   std::string siteid = "";
   std::string eventname = "";
@@ -2810,7 +2846,8 @@ int main(int argc, char *argv[]) {
         break;
       case SITENAME:
         if (opt.arg) {
-          fprintf(stdout, "--sitename '%s'\n", opt.arg);
+          if (debug_level > 0)
+	    fprintf(stdout, "--sitename '%s'\n", opt.arg);
           sitename = opt.arg;
         } else {
           fprintf(stderr, "Error: --sitename needs a string specified\n");
@@ -2819,7 +2856,8 @@ int main(int argc, char *argv[]) {
         break;
       case EVENTNAME:
         if (opt.arg) {
-          fprintf(stdout, "--eventname '%s'\n", opt.arg);
+          if (debug_level > 0)
+	    fprintf(stdout, "--eventname '%s'\n", opt.arg);
           eventname = opt.arg;
         } else {
           fprintf(stderr, "Error: --eventname needs a string specified\n");
@@ -3101,7 +3139,7 @@ int main(int argc, char *argv[]) {
               siteid.c_str(), storeMappingAsJSON);
   }
   if (debug_level > 0)
-    fprintf(stdout, "Done [%'zu files processed].\n", nfiles);
+    fprintf(stdout, "Done [%'zu file%s processed].\n", nfiles, nfiles==1?"":"s");
 
   return 0;
 }
