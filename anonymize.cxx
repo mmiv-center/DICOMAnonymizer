@@ -2249,7 +2249,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (options[VERSION]) {
-    fprintf(stdout, "anonymizer version 1.0.4.%s\n", VERSION_DATE);
+    fprintf(stdout, "anonymizer version 1.1.0.%s\n", VERSION_DATE);
     return 0;
   }
 
