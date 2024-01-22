@@ -909,13 +909,13 @@ std::string limitToMaxLength(gdcm::Tag t, std::string& str_in, const gdcm::DataS
   if (VRName == "??") // don't know, do nothing
     return str_in;
 
-  if (str_in.size()%2!=0) { // odd length for this value, make even length by adding null or space
+  /*if (str_in.size()%2!=0) { // odd length for this value, make even length by adding null or space
     if (VRName != "UI") { 
       str_in += " ";
     } else { // but what about binary, this is only if its isASCII
       str_in += '\0';
     }
-  }
+    }*/
   
   std::unordered_map<std::string, uint32_t> max_lengths = {
     {"AE", 16},
@@ -1345,6 +1345,7 @@ bool applyWork(gdcm::Anonymizer &anon,
       if (which == "StudyID") {
 	// if this is the case replace the StudyID with the hash from the StudyInstanceUID
 	val = trueStudyInstanceUID + params->projectname;
+	// val = trueStudyInstanceUID;
 	//fprintf(stderr, "WARNING: OUR StudyID tag was empty, now it is: \"%s\"\n", val.c_str());
       }
       
@@ -1944,14 +1945,15 @@ void *ReadFilesThread(void *voidparams) {
     
     // fprintf(stdout, "project name is: %s\n", params->projectname.c_str());
     // this is a private tag --- does not work yet - we can only remove
-    if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1010)))
+    if (ds.FindDataElement(gdcm::PrivateTag(0x0013, 0x1010)))
       anon.Remove(gdcm::PrivateTag(0x0013, 0x1010));
 
-    if (ds.FindDataElement(gdcm::Tag(0x0013, 0x1013)))
+    if (ds.FindDataElement(gdcm::PrivateTag(0x0013, 0x1013)))
       anon.Remove(gdcm::PrivateTag(0x0013, 0x1013));
 
     if (ds.FindDataElement(gdcm::PrivateTag(0x0013, 0x1011)))
       anon.Remove(gdcm::PrivateTag(0x0013, 0x1011));
+    
     if (ds.FindDataElement(gdcm::PrivateTag(0x0013, 0x1012)))
       anon.Remove(gdcm::PrivateTag(0x0013, 0x1012));
 
