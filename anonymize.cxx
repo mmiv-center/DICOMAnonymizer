@@ -1068,7 +1068,7 @@ void addDays(struct sdate &date1, int days) {
   std::chrono::year_month_day _ymd(std::chrono::year(date1.y), std::chrono::month(date1.m), std::chrono::day(date1.d));
   // fprintf(stdout, "%d %d %d\n", static_cast<int>(_ymd.year()), static_cast<unsigned>(_ymd.month()), static_cast<unsigned>(_ymd.day()));
   // add some days
-  _ymd = std::chrono::sys_days{_ymd} + std::chrono::days{42};
+  _ymd = std::chrono::sys_days{_ymd} + std::chrono::days{days};
   // fprintf(stdout, "42 days later: %d %d %d\n", static_cast<int>(_ymd.year()), static_cast<unsigned>(_ymd.month()), static_cast<unsigned>(_ymd.day()));
   date1.y = static_cast<int>(_ymd.year());
   date1.m = static_cast<unsigned>(_ymd.month());
