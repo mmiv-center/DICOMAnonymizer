@@ -900,6 +900,16 @@ nlohmann::json work = nlohmann::json::array({
 });
 
 
+std::map<std::string, int> workCache;
+void createWorkCache() {
+  for (int i = 0; i < work.size(); i++) {
+    std::string key = std::string(work[i][0]) + std::string(work[i][1]);
+    if (workCache.find(key) == workCache.end()) {
+      // add this entry
+      workCache.insert(std::pair<std::string, int>{key,i});
+    }
+  }
+}
 
 std::string limitToMaxLength(gdcm::Tag t, std::string& str_in, const gdcm::DataSet& ds) {
   const gdcm::DataElement& de = ds.GetDataElement(t);
@@ -907,7 +917,7 @@ std::string limitToMaxLength(gdcm::Tag t, std::string& str_in, const gdcm::DataS
   std::string VRName = gdcm::VR::GetVRString(vr);
 
   if (VRName == "??") // don't know, do nothing
-    return str_in;
+    return std::string(str_in);
 
   /*if (str_in.size()%2!=0) { // odd length for this value, make even length by adding null or space
     if (VRName != "UI") { 
@@ -942,14 +952,14 @@ std::string limitToMaxLength(gdcm::Tag t, std::string& str_in, const gdcm::DataS
 
   auto max_length_it = max_lengths.find(VRName);
   if (max_length_it == max_lengths.end())
-    return str_in; // do nothing
+    return std::string(str_in); // do nothing
 
   // some elements need a space to get to even length, some need a null byte
   // see: https://dicom.nema.org/dicom/2013/output/chtml/part05/sect_6.2.html
 
   uint32_t max_l = max_length_it->second;
   if (max_l == 0)
-    return str_in; // should never happen
+    return std::string(str_in); // should never happen
 
   if (str_in.length() > max_l) {
     std::string str_limited = str_in.substr(0, max_l);
@@ -959,7 +969,7 @@ std::string limitToMaxLength(gdcm::Tag t, std::string& str_in, const gdcm::DataS
     return str_limited;
   }
 
-  return str_in;
+  return std::string(str_in);
 }
 
 /*std::string limitToMaxLength(gdcm::Tag t, std::string str_in, gdcm::DataSet &ds) {
@@ -1077,8 +1087,10 @@ void addDays(struct sdate &date1, int days) {
 }
 
 
+
 // if true it indicates that some work was done
-bool applyWork(gdcm::Anonymizer &anon,
+bool applyWork(gdcm::DataElement de,
+         gdcm::Anonymizer &anon,
 	       gdcm::DataSet &ds,
 	       int work_idx,
 	       threadparams *params,
@@ -1132,19 +1144,19 @@ bool applyWork(gdcm::Anonymizer &anon,
       std::string val = sf.ToString(hTag);
       std::string ns("");
       try {
-	std::regex re(what);
-	std::smatch match;
-	if (std::regex_search(val, match, re) && match.size() > 1) {
-	  for (int j = 1; j < match.size(); j++) {
-	    ns += match.str(j) + std::string(" ");
-	  }
-	} else {
-	  ns = std::string("FIONA: no match on regular expression");
-	}
+        std::regex re(what);
+        std::smatch match;
+        if (std::regex_search(val, match, re) && match.size() > 1) {
+          for (int j = 1; j < match.size(); j++) {
+            ns += match.str(j) + std::string(" ");
+          }
+        } else {
+          ns = std::string("FIONA: no match on regular expression");
+        }
       } catch (std::regex_error &e) {
-	if (debug_level > 0)
-	  fprintf(stderr, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
-		  what.c_str(), val.c_str(), ns.c_str());
+        if (debug_level > 0)
+          fprintf(stderr, "ERROR: regular expression match failed on %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(),
+            what.c_str(), val.c_str(), ns.c_str());
       }
       // fprintf(stdout, "show: %s,%s which: %s what: %s old: %s new: %s\n", tag1.c_str(), tag2.c_str(), which.c_str(), what.c_str(), val.c_str(),
       // ns.c_str());
@@ -1222,21 +1234,21 @@ bool applyWork(gdcm::Anonymizer &anon,
       std::string input_bodypart = sf.ToString(hTag);
       bool found = false;
       for (int b_idx = 0; b_idx < allowedBodyParts.size(); b_idx++) {
-	// what is the current value in this tag?
-	// could we have a space at the end of input_bodypart?
-	std::string allowedBP = allowedBodyParts[b_idx][3];
-	if (allowedBP.size() % 2 == 1) { // we need even length strings for comparisson
-	  allowedBP += " ";
-	}
-	// fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBP.c_str());
-	if (input_bodypart.compare(allowedBP) == 0) {
-	  // allowed string, keep it
-	  found = true;
-	  break;
-	}
+        // what is the current value in this tag?
+        // could we have a space at the end of input_bodypart?
+        std::string allowedBP = allowedBodyParts[b_idx][3];
+        if (allowedBP.size() % 2 == 1) { // we need even length strings for comparisson
+          allowedBP += " ";
+        }
+        // fprintf(stdout, "body parts: \"%s\" \"%s\"\n", input_bodypart.c_str(), allowedBP.c_str());
+        if (input_bodypart.compare(allowedBP) == 0) {
+          // allowed string, keep it
+          found = true;
+          break;
+        }
       }
       if (found)
-	return false;
+        return false;
     }
     // set to empty
     if (debug_level > 2) {
@@ -1261,7 +1273,9 @@ bool applyWork(gdcm::Anonymizer &anon,
     return false;
   }
   if (what == "remove") {
-    anon.Remove(hTag);
+    if (isPrivateTag?ds.FindDataElement(phTag):ds.FindDataElement(hTag)) {
+      return ds.Remove( hTag ) == 1;
+    }
     return true;
   }
   if (what == "empty") {
@@ -1281,32 +1295,42 @@ bool applyWork(gdcm::Anonymizer &anon,
       
       std::string val("");
       if (bv4) {
-	val = std::string(bv4->GetPointer(), bv4->GetLength() );
+        val = std::string(bv4->GetPointer(), bv4->GetLength() );
       } else {
-	val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
+        val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
       }
       // std::string val = sf.ToString(hTag); // this is problematic - we get the first occurance of this tag, not nessessarily the root tag
       //std::string hash = SHA256::digestString(val + params->projectname).toHex();
       std::string hash = betterUID(val + params->projectname, params->old_style_uid);
       if (which == "SOPInstanceUID") // keep a copy as the filename for the output
-	filenamestring = hash.c_str();
+        filenamestring = hash.c_str();
       
       if (which == "SeriesInstanceUID")
-	seriesdirname = hash.c_str();
+        seriesdirname = hash.c_str();
       
       if (which == "StudyInstanceUID") {
-	// fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
-	if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
-	  val = trueStudyInstanceUID;
-	  // hash = SHA256::digestString(val + params->projectname).toHex();
-	  hash = betterUID(val + params->projectname, params->old_style_uid);
-	}
-	// we want to keep a mapping of the old and new study instance uids
-	params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+        // fprintf(stdout, "%s %s ?= %s\n", filename, val.c_str(), trueStudyInstanceUID.c_str());
+        if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+          val = trueStudyInstanceUID;
+          // hash = SHA256::digestString(val + params->projectname).toHex();
+          hash = betterUID(val + params->projectname, params->old_style_uid);
+        }
+        // we want to keep a mapping of the old and new study instance uids
+        params->byThreadStudyInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
       }
       if (which == "SeriesInstanceUID") {
-	// we want to keep a mapping of the old and new study instance uids
-	params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+        // we want to keep a mapping of the old and new study instance uids
+        std::string key(val);
+        std::string value(hash);
+        if (key.length() > 1 && key[key.length()-1] == '\0') {
+          std::string::iterator it = key.end() -1;
+          key.erase(it);
+        }
+        if (value.length() > 1 && value[value.length()-1] == '\0') {
+          std::string::iterator it = value.end() -1;
+          value.erase(it);
+        }
+        params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(key, value)); // should only add this pair once
       }
       
       //if (ds.FindDataElement(gdcm::Tag(a, b)))
@@ -1331,9 +1355,9 @@ bool applyWork(gdcm::Anonymizer &anon,
       const gdcm::ByteValue *bv4 = de1.GetByteValue();
       std::string val("");
       if (bv4) {
-	val = std::string(bv4->GetPointer(), bv4->GetLength() );
+        val = std::string(bv4->GetPointer(), bv4->GetLength() );
       } else {
-	val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
+        val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
       }
       
       // Question: What happens if the string exists and is empty? In that case we get the same hash value for
@@ -1343,46 +1367,56 @@ bool applyWork(gdcm::Anonymizer &anon,
       // in a mismatch error.
       // For now we replace the StudyID with the hash of the StudyInstanceUID - ALWAYS.
       if (which == "StudyID") {
-	// if this is the case replace the StudyID with the hash from the StudyInstanceUID
-	val = trueStudyInstanceUID + params->projectname;
-	// val = trueStudyInstanceUID;
-	//fprintf(stderr, "WARNING: OUR StudyID tag was empty, now it is: \"%s\"\n", val.c_str());
+        // if this is the case replace the StudyID with the hash from the StudyInstanceUID
+        val = trueStudyInstanceUID + params->projectname;
+        // val = trueStudyInstanceUID;
+        //fprintf(stderr, "WARNING: OUR StudyID tag was empty, now it is: \"%s\"\n", val.c_str());
       }
       
       std::string hash = "";
       if (params->old_style_uid) {
-	hash = SHA256::digestString(val).toHex();
+        hash = SHA256::digestString(val).toHex();
       } else {
-	SHA256::digest a = SHA256::digestString(val);
-	hash = toDec(a.data, a.size);            
+        SHA256::digest a = SHA256::digestString(val);
+        hash = toDec(a.data, a.size);            
       }
       
       if (which == "SOPInstanceUID") // keep a copy as the filename for the output
-	filenamestring = hash.c_str();
+        filenamestring = hash.c_str();
       
       if (which == "SeriesInstanceUID")
-	seriesdirname = hash.c_str();
+        seriesdirname = hash.c_str();
       
       if (which == "SeriesInstanceUID") {
-	// we want to keep a mapping of the old and new study instance uids
-	params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(val, hash)); // should only add this pair once
+        // we want to keep a mapping of the old and new study instance uids
+        std::string key(val);
+        std::string value(hash);
+        if (key.length() > 1 && key[key.length()-1] == '\0') {
+          std::string::iterator it = key.end() -1;
+          key.erase(it);
+        }
+        if (value.length() > 1 && value[value.length()-1] == '\0') {
+          std::string::iterator it = value.end() -1;
+          value.erase(it);
+        }
+        params->byThreadSeriesInstanceUID.insert(std::pair<std::string, std::string>(key, value)); // should only add this pair once
       }
       
       if (which == "StudyInstanceUID") {
-	if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
-	  // fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
-	  val = trueStudyInstanceUID;
-	  if (what == "hashuid") { // with root
-	    hash = betterUID(val);
-	  } else { // if we can use the hash instead, no root infront
-	    if (params->old_style_uid) {
-	      hash = SHA256::digestString(val).toHex();
-	    } else {
-	      SHA256::digest a = SHA256::digestString(val);
-	      hash = toDec(a.data, a.size);
-	    }
-	  }
-	}
+        if (trueStudyInstanceUID != val) { // in rare cases we will not get the correct tag from sf.ToString, instead use the explicit loop over the root tags
+          // fprintf(stdout, "True StudyInstanceUID is not the same as ToString one: %s != %s\n", val.c_str(), trueStudyInstanceUID.c_str());
+          val = trueStudyInstanceUID;
+          if (what == "hashuid") { // with root
+            hash = betterUID(val);
+          } else { // if we can use the hash instead, no root infront
+            if (params->old_style_uid) {
+              hash = SHA256::digestString(val).toHex();
+            } else {
+              SHA256::digest a = SHA256::digestString(val);
+              hash = toDec(a.data, a.size);
+            }
+          }
+        }
       }
       
       hash = limitToMaxLength(hTag, hash, ds);
@@ -1404,54 +1438,54 @@ bool applyWork(gdcm::Anonymizer &anon,
       
       std::string val("");
       if (bv4) {
-	val = std::string(bv4->GetPointer(), bv4->GetLength() );
-	//fprintf(stdout, "VALUE from bv4 :  \"%s\" length: %ud\n", val.c_str(), (unsigned int)bv4->GetLength());
+        val = std::string(bv4->GetPointer(), bv4->GetLength() );
+        //fprintf(stdout, "VALUE from bv4 :  \"%s\" length: %ud\n", val.c_str(), (unsigned int)bv4->GetLength());
       } else {
-	val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
+        val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
       }
       
       // parse the date string YYYYMMDD
       struct sdate date1;
       if (sscanf(val.c_str(), "%04ld%02ld%02ld", &date1.y, &date1.m, &date1.d) == 3) {
-	// replace with added value
-	addDays(date1, nd);
-	//long c = gday(date1) + nd;
-	//struct sdate date2 = dtf(c);
-	char dat[256];
-	snprintf(dat, 256, "%04ld%02ld%02ld", date1.y, date1.m, date1.d);
-	//fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
-	// fprintf(stdout, "found a date : %s, replace with date: %s\n",
-	// val.c_str(), dat);
-	
-	de1.SetByteValue( dat, (uint32_t)strlen(dat) );
-	ds.Replace( de1 );
-	//anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
+        // replace with added value
+        addDays(date1, nd);
+        //long c = gday(date1) + nd;
+        //struct sdate date2 = dtf(c);
+        char dat[256];
+        snprintf(dat, 256, "%04ld%02ld%02ld", date1.y, date1.m, date1.d);
+        //fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
+        // fprintf(stdout, "found a date : %s, replace with date: %s\n",
+        // val.c_str(), dat);
+        
+        de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+        ds.Replace( de1 );
+        //anon.Replace(hTag, limitToMaxLength(hTag, std::string(dat), ds).c_str());
       } else {
-	// could not read the date here, just remove instead
-	// fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
-	// %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
-	// which.c_str(), filename);
-	
-	// The issue with empty dates is that we cannot get those back from the research PACS, we should instead use some
-	// default dates to cover these cases. What is a good date range for this? Like any date in a specific year?
-	// This is true for the StudyDate only. So we can keep the other dates empty. Strange otherwise if there are multiple dates
-	// and some had values (will be advanced) and some where empty and get the default dates.
-	if (which == "StudyDate") {
-	  std::string fixed_year("1970");
-	  int variable_month = (rand() % 12) + 1;
-	  int day = 1;
-	  char dat[256];
-	  snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
-	  // fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
-	  de1.SetByteValue( dat, (uint32_t)strlen(dat) );
-	  ds.Replace( de1 );
-	} else {
-	  // keep them empty
-	  char dat[1] = {'\0'};
-	  de1.SetByteValue( dat, (uint32_t)strlen(dat) );
-	  ds.Replace( de1 );
-	}
-	//anon.Replace(hTag, dat);
+        // could not read the date here, just remove instead
+        // fprintf(stdout, "Warning: could not parse a date (\"%s\", %04o,
+        // %04o, %s) in %s, remove field instead...\n", val.c_str(), a, b,
+        // which.c_str(), filename);
+        
+        // The issue with empty dates is that we cannot get those back from the research PACS, we should instead use some
+        // default dates to cover these cases. What is a good date range for this? Like any date in a specific year?
+        // This is true for the StudyDate only. So we can keep the other dates empty. Strange otherwise if there are multiple dates
+        // and some had values (will be advanced) and some where empty and get the default dates.
+        if (which == "StudyDate") {
+          std::string fixed_year("1970");
+          int variable_month = (rand() % 12) + 1;
+          int day = 1;
+          char dat[256];
+          snprintf(dat, 256, "%s%02d%02d", fixed_year.c_str(), variable_month, day);
+          // fprintf(stderr, "Warning: no date could be parsed in \"%s\" so there is no shifted date, use random date instead.\n", val.c_str());
+          de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+          ds.Replace( de1 );
+        } else {
+          // keep them empty
+          char dat[1] = {'\0'};
+          de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+          ds.Replace( de1 );
+        }
+        //anon.Replace(hTag, dat);
       }
       return true;
     }
@@ -1479,10 +1513,10 @@ bool applyWork(gdcm::Anonymizer &anon,
 	}*/
       std::string val("");
       if (bv4) {
-	val = std::string(bv4->GetPointer(), bv4->GetLength() );
+        val = std::string(bv4->GetPointer(), bv4->GetLength() );
 	//fprintf(stdout, "VALUE from bv4 :  \"%s\" length: %ud\n", val.c_str(), (unsigned int)bv4->GetLength());
       } else {
-	val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
+        val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
       }
       
       //std::string val = sf.ToString(hTag); // does not seem to work inside a sequence
@@ -1493,70 +1527,70 @@ bool applyWork(gdcm::Anonymizer &anon,
       int numParsedDateObjects = sscanf(val.c_str(), "%04ld%02ld%02ld%s", &date1.y, &date1.m, &date1.d, t);
       if (numParsedDateObjects == 4) {
 	
-	// try this with chrono instead
-	addDays(date1, nd);
-	
-	//long c = gday(date1) + nd;
-	//struct sdate date2 = dtf(c);
-	char dat[256];
-	// TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
-	snprintf(dat, 256, "%04ld%02ld%02ld%s%s", date1.y, date1.m, date1.d, t, (((strlen(t)%2)==0)?"":" "));
-	//fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
-	de1.SetByteValue( dat, (uint32_t)strlen(dat) );
-	ds.Replace( de1 );
+        // try this with chrono instead
+        addDays(date1, nd);
+        
+        //long c = gday(date1) + nd;
+        //struct sdate date2 = dtf(c);
+        char dat[256];
+        // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+        snprintf(dat, 256, "%04ld%02ld%02ld%s%s", date1.y, date1.m, date1.d, t, (((strlen(t)%2)==0)?"":" "));
+        //fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
+        de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+        ds.Replace( de1 );
 	
       } else if ( numParsedDateObjects == 3) { // assume that t is empty
-	addDays(date1, nd);
+        addDays(date1, nd);
 	
-	// replace with added value
-	// long c = gday(date1) + nd;
-	//struct sdate date2 = dtf(c);
-	char dat[256];
-	// TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
-	snprintf(dat, 256, "%04ld%02ld%02ld", date1.y, date1.m, date1.d);
-	if (debug_level > 2)
-	  fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
-	de1.SetByteValue( dat, (uint32_t)strlen(dat) );
-	ds.Replace( de1 );
-      } else if ( numParsedDateObjects == 2) { // assume that t is empty
-	// replace with added value
-	date1.d = 1;
-	addDays(date1, nd);
-	
-	//long c = gday(date1) + nd;
-	//struct sdate date2 = dtf(c);
-	char dat[256];
-	// TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
-	snprintf(dat, 256, "%04ld%02ld", date1.y, date1.m);
-	if (debug_level > 2)
-	  fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
-	de1.SetByteValue( dat, (uint32_t)strlen(dat) );
-	ds.Replace( de1 );
-      } else if ( numParsedDateObjects == 1) { // assume that t is empty
-	// replace with added value
-	date1.d = 1;
-	date1.m = 1;
-	addDays(date1, nd);
-	//long c = gday(date1) + nd;
-	//struct sdate date2 = dtf(c);
-	char dat[256];
-	// TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
-	snprintf(dat, 256, "%04ld", date1.y);
-	if (debug_level > 2)
-	  fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
-	de1.SetByteValue( dat, (uint32_t)strlen(dat) );
-	ds.Replace( de1 );
+        // replace with added value
+        // long c = gday(date1) + nd;
+        //struct sdate date2 = dtf(c);
+        char dat[256];
+        // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+        snprintf(dat, 256, "%04ld%02ld%02ld", date1.y, date1.m, date1.d);
+        if (debug_level > 2)
+          fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
+        de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+        ds.Replace( de1 );
+            } else if ( numParsedDateObjects == 2) { // assume that t is empty
+        // replace with added value
+        date1.d = 1;
+        addDays(date1, nd);
+        
+        //long c = gday(date1) + nd;
+        //struct sdate date2 = dtf(c);
+        char dat[256];
+        // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+        snprintf(dat, 256, "%04ld%02ld", date1.y, date1.m);
+        if (debug_level > 2)
+          fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
+        de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+        ds.Replace( de1 );
+            } else if ( numParsedDateObjects == 1) { // assume that t is empty
+        // replace with added value
+        date1.d = 1;
+        date1.m = 1;
+        addDays(date1, nd);
+        //long c = gday(date1) + nd;
+        //struct sdate date2 = dtf(c);
+        char dat[256];
+        // TODO: ok, there are valid DT fields that only contain a year or only a year and a month but no day
+        snprintf(dat, 256, "%04ld", date1.y);
+        if (debug_level > 2)
+          fprintf(stdout, "found a date (%04x,%04x): %s, replace with date: %s\n", a, b, val.c_str(), dat);
+        de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+        ds.Replace( de1 );
       } else {
-	// could not read the date here, just remove instead
-	if (debug_level > 2)
-	  fprintf(stdout, "Warning: could not parse date (\"%s\", %04x,%04x, %s) in %s, remove field instead...\n", val.c_str(), a, b,which.c_str(), filename.c_str());
-	
-	// TODO: We should try harder here. The day and month might be missing components
-	// and we still have a DT field that is valid (null components).
-	char dat[1] = {'\0'};
-	de1.SetByteValue( dat, (uint32_t)strlen(dat) );
-	ds.Replace( de1 );
-	// anon.Replace(hTag, "");
+        // could not read the date here, just remove instead
+        if (debug_level > 2)
+          fprintf(stdout, "Warning: could not parse date (\"%s\", %04x,%04x, %s) in %s, remove field instead...\n", val.c_str(), a, b,which.c_str(), filename.c_str());
+        
+        // TODO: We should try harder here. The day and month might be missing components
+        // and we still have a DT field that is valid (null components).
+        char dat[1] = {'\0'};
+        de1.SetByteValue( dat, (uint32_t)strlen(dat) );
+        ds.Replace( de1 );
+        // anon.Replace(hTag, "");
       }
       return true;
     }
@@ -1567,11 +1601,11 @@ bool applyWork(gdcm::Anonymizer &anon,
       gdcm::DataElement de1 = ds.GetDataElement( hTag );
       const gdcm::ByteValue *bv4 = de1.GetByteValue();
       /*std::string val("");
-	if (bv4) {
-	val = std::string(bv4->GetPointer(), bv4->GetLength() );
-	} else {
-	val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
-	}*/
+      if (bv4) {
+      val = std::string(bv4->GetPointer(), bv4->GetLength() );
+      } else {
+      val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
+      }*/
       char dat[5];
       snprintf(dat, 5, "YES ");
       de1.SetByteValue( dat, (uint32_t)strlen(dat) );
@@ -1585,11 +1619,11 @@ bool applyWork(gdcm::Anonymizer &anon,
       gdcm::DataElement de1 = ds.GetDataElement( hTag );
       const gdcm::ByteValue *bv4 = de1.GetByteValue();
       /*std::string val("");
-	if (bv4) {
-	val = std::string(bv4->GetPointer(), bv4->GetLength() );
-	} else {
-	val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
-	}*/
+      if (bv4) {
+      val = std::string(bv4->GetPointer(), bv4->GetLength() );
+      } else {
+      val = sf.ToString(hTag); // does not seem to work inside a sequence, but is this really needed?
+      }*/
       char dat[9];
       snprintf(dat, 9, "MODIFIED");
       de1.SetByteValue( dat, (uint32_t)strlen(dat) );
@@ -1638,17 +1672,22 @@ bool applyWork(gdcm::Anonymizer &anon,
 // example is from gdcmAnonymizer.cxx:
 //   static bool Anonymizer_RemoveRetired(File const &file, DataSet &ds)
 static bool AnonymizeBasedOnWork(gdcm::File const &file, gdcm::DataSet &ds, const std::string trueStudyInstanceUID, threadparams *params, std::string &filenamestring, std::string &seriesdirname, int level) {
-  static const gdcm::Global &g = gdcm::GlobalInstance;
-  static const gdcm::Dicts &dicts = g.GetDicts();
-  static const gdcm::Dict &pubdict = dicts.GetPublicDict();
+  //static const gdcm::Global &g = gdcm::GlobalInstance;
+  //static const gdcm::Dicts &dicts = g.GetDicts();
+  //static const gdcm::Dict &pubdict = dicts.GetPublicDict();
 
   std::string spaces(level, ' ');
+  char buf1[16];
+  char buf2[16];
 
   gdcm::DataSet::Iterator it = ds.Begin();
   for ( ; it != ds.End(); ) {
     const gdcm::DataElement &de1 = *it;
+    const gdcm::Tag ttt = de1.GetTag();
     // std::set::erase invalidate iterator, so we need to make a copy first:
     gdcm::DataSet::Iterator dup = it;
+    if (debug_level > 2)
+      fprintf(stdout, "%s  0x%04x,0x%04x advance in %zu, %s level: %d\n", spaces.c_str(), ttt.GetGroup(), ttt.GetElement(), ds.Size(), filenamestring.c_str(), level); fflush(stdout);
     ++it;
 
     const gdcm::DataElement &de = *dup;
@@ -1661,16 +1700,16 @@ static bool AnonymizeBasedOnWork(gdcm::File const &file, gdcm::DataSet &ds, cons
     if ( vr.Compatible(gdcm::VR::SQ) ) {
       gdcm::SmartPointer<gdcm::SequenceOfItems> sq = de.GetValueAsSQ();
       if ( sq ) {
-	gdcm::SequenceOfItems::SizeType n = sq->GetNumberOfItems();
-	for ( gdcm::SequenceOfItems::SizeType i = 1; i <= n; i++) { // items start counting at 1
-	  gdcm::Item &item = sq->GetItem( i );
-	  gdcm::DataSet &nested = item.GetNestedDataSet();
-	  AnonymizeBasedOnWork( file, nested, trueStudyInstanceUID, params, filenamestring, seriesdirname, level+4 );
-	}
-	gdcm::DataElement de_dup = *dup;
-	de_dup.SetValue( *sq );
-	de_dup.SetVLToUndefined(); // FIXME
-	ds.Replace( de_dup );
+        gdcm::SequenceOfItems::SizeType n = sq->GetNumberOfItems();
+        for ( gdcm::SequenceOfItems::SizeType i = 1; i <= n; i++) { // items start counting at 1
+          gdcm::Item &item = sq->GetItem( i );
+          gdcm::DataSet &nested = item.GetNestedDataSet();
+          AnonymizeBasedOnWork( file, nested, trueStudyInstanceUID, params, filenamestring, seriesdirname, level+4 );
+        }
+        gdcm::DataElement de_dup = *dup;
+        de_dup.SetValue( *sq );
+        de_dup.SetVLToUndefined(); // FIXME
+        ds.Replace( de_dup );
       }
     } else {
       // not a sequence, so anonymize this data element
@@ -1679,32 +1718,47 @@ static bool AnonymizeBasedOnWork(gdcm::File const &file, gdcm::DataSet &ds, cons
       gdcm::Anonymizer anon;
       anon.SetFile(file);
       
-      for (int wi = 0; wi < work.size(); wi++) {
-	// fprintf(stdout, "convert tag: %d/%lu\n", i, work.size());
-	std::string tag1(work[wi][0]);
-	std::string tag2(work[wi][1]);
-	std::string which(work[wi][2]);
-	std::string what("replace");
-	bool regexp = false; // if we find a regular expression, only retain the entries that are capturing groups (separated by a space)
-	if (work[wi].size() > 3) {
-	  what = work[wi][3];
-	}
-	if (work[wi].size() > 4 && work[wi][4] == "regexp") {
-	  regexp = true;
-	}
-	//if (what != "hashuid+PROJECTNAME")
-	//  continue; // we can only do this inside a sequence, would be good if we can do more inside sequences!!!!
-	int a = strtol(tag1.c_str(), NULL, 16);
-	int b = strtol(tag2.c_str(), NULL, 16);
-	if (tt.GetGroup() != a || tt.GetElement() != b) { // only anonymize the current item (its not a sequence)
-	  continue;
-	}
-	bool somethingDone = applyWork(anon, ds, wi, params, trueStudyInstanceUID, filename, filenamestring, seriesdirname);
-	if (debug_level > 2 && somethingDone) {
-	  fprintf(stdout, "%s   did something on tag %04x,%04x\n", spaces.c_str(), tt.GetGroup(), tt.GetElement());
-	}
-	fflush(stdout);
-      }	
+      // We would like to replace this loop. Should be a lookup only
+      int a = tt.GetGroup();
+      int b = tt.GetElement();
+      snprintf(buf1, 16, "%04x", a);
+      snprintf(buf2, 16, "%04x", b);
+      std::string key = std::string(buf1) + std::string(buf2);
+      if (workCache.find(key) != workCache.end()) {
+        // found an entry for this group/element in the cache, extract index work[wi]
+        int wi = workCache.find(key)->second;
+        // we want to anonymize the current DataElement de, not all of them
+        bool somethingDone = applyWork(de, anon, ds, wi, params, trueStudyInstanceUID, filename, filenamestring, seriesdirname);
+        if (debug_level > 2 && somethingDone) {
+          fprintf(stdout, "%s   did something on tag %04x,%04x\n", spaces.c_str(), tt.GetGroup(), tt.GetElement());
+        }
+      }
+/*      for (int wi = 0; wi < work.size(); wi++) {
+        std::string tag1(work[wi][0]);
+        std::string tag2(work[wi][1]);
+        std::string which(work[wi][2]);
+        std::string what("replace");
+        //bool regexp = false; // if we find a regular expression, only retain the entries that are capturing groups (separated by a space)
+        if (work[wi].size() > 3) {
+          what = work[wi][3];
+        }
+        //if (work[wi].size() > 4 && work[wi][4] == "regexp") {
+        //  regexp = true;
+       // }
+        //if (what != "hashuid+PROJECTNAME")
+        //  continue; // we can only do this inside a sequence, would be good if we can do more inside sequences!!!!
+        int a = strtol(tag1.c_str(), NULL, 16);
+        int b = strtol(tag2.c_str(), NULL, 16);
+        if (tt.GetGroup() != a || tt.GetElement() != b) { // only anonymize the current item (its not a sequence)
+          continue;
+        }
+        //fprintf(stdout, "  applyWork with %x %x %s %s %d\n", a, b, which.c_str(), what.c_str(), wi);
+        bool somethingDone = applyWork(anon, ds, wi, params, trueStudyInstanceUID, filename, filenamestring, seriesdirname);
+        if (debug_level > 2 && somethingDone) {
+          fprintf(stdout, "%s   did something on tag %04x,%04x\n", spaces.c_str(), tt.GetGroup(), tt.GetElement());
+        }
+        fflush(stdout);
+      }	*/
     }
   }
   return true;
@@ -1770,8 +1824,8 @@ void *ReadFilesThread(void *voidparams) {
         const gdcm::DataElement &de = (*cit);
         (*cit).GetValue().Print(strm);
         modalitystring = strm.str();
-	modalitystring.erase(modalitystring.find_last_not_of(" \n\r\t")+1);
-	// trim(modalitystring);
+        modalitystring.erase(modalitystring.find_last_not_of(" \n\r\t")+1);
+        // trim(modalitystring);
         break;
       }
     }
@@ -1895,7 +1949,6 @@ void *ReadFilesThread(void *voidparams) {
     //gdcm::Trace::SetDebug(true);
     //gdcm::Trace::SetWarning(true);
     //gdcm::Trace::SetError(true);
-
     bool worked = AnonymizeBasedOnWork(fileToAnon, ds, trueStudyInstanceUID, params, filenamestring, seriesdirname, 0);
     
     //
@@ -2118,13 +2171,21 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
     for (unsigned int thread = 0; thread < nthreads; thread++) {
       for (std::map<std::string, std::string>::iterator it = params[thread].byThreadStudyInstanceUID.begin();
            it != params[thread].byThreadStudyInstanceUID.end(); ++it) {
-        uidmappings1.insert(std::pair<std::string, std::string>(it->first, it->second));
+        std::string key = it->first;
+        key.erase(key.find_last_not_of(" \n\r\t")+1);
+        std::string value = it->second;
+        value.erase(key.find_last_not_of(" \n\r\t")+1);
+        uidmappings1.insert(std::pair<std::string, std::string>(key, value));
       }
     }
     for (unsigned int thread = 0; thread < nthreads; thread++) {
       for (std::map<std::string, std::string>::iterator it = params[thread].byThreadSeriesInstanceUID.begin();
            it != params[thread].byThreadSeriesInstanceUID.end(); ++it) {
-        uidmappings2.insert(std::pair<std::string, std::string>(it->first, it->second));
+        std::string key = it->first;
+        key.erase(key.find_last_not_of(" \n\r\t")+1);
+        std::string value = it->second;
+        value.erase(key.find_last_not_of(" \n\r\t")+1);
+        uidmappings2.insert(std::pair<std::string, std::string>(key, value));
       }
     }
     nlohmann::json ar;
@@ -2604,6 +2665,11 @@ int main(int argc, char *argv[]) {
       fflush(stderr);
       exit(-1);
     }
+
+    // before we try to anonymize our files we should create a cache of work,
+    // We need to know if a tag is going to be anonymized (based on group element) and where
+    // in work the corresponding entry can be found.
+    createWorkCache();
 
     // ReadFiles(nfiles, filenames, output.c_str(), numthreads, confidence, storeMappingAsJSON);
     ReadFiles(nfiles, filenames, output.c_str(), patientID.c_str(), dateincrement, byseries, old_style_uid, numthreads, projectname.c_str(), sitename.c_str(),
