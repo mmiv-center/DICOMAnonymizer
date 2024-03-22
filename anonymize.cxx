@@ -1126,7 +1126,7 @@ bool applyWork(gdcm::DataElement de,
   if (hTag.IsPrivate()) {
     phTag = gdcm::PrivateTag(a,b,which.c_str()); // 0x71,0x22, "SIEMENS MED PT"
     isPrivateTag = true;
-    fprintf(stderr, "looking now for a PRIVATE TAG AS %04x,%04x %s what: %s isPrivateTag: %s\n", a, b, which.c_str(), what.c_str(), isPrivateTag?"private":"public");
+    //fprintf(stderr, "looking now for a PRIVATE TAG AS %04x,%04x %s what: %s isPrivateTag: %s\n", a, b, which.c_str(), what.c_str(), isPrivateTag?"private":"public");
   }
   
   if (which == "DeIdentificationMethodCodeSequence")
@@ -1818,7 +1818,7 @@ void *ReadFilesThread(void *voidparams) {
       }
     }
     // can we get the modality from the file? We would like to use it as a prefix to the individual DICOM files filename
-    std::string modalitystring = "";
+    /*std::string modalitystring = "";
     cit = dss.GetDES().begin();
     for( ; cit != dss.GetDES().end(); ++cit) {
       std::stringstream strm;
@@ -1830,7 +1830,7 @@ void *ReadFilesThread(void *voidparams) {
         // trim(modalitystring);
         break;
       }
-    }
+      }*/
 
     gdcm::Anonymizer anon;
     gdcm::File &fileToAnon = reader.GetFile();
@@ -1850,6 +1850,11 @@ void *ReadFilesThread(void *voidparams) {
     gdcm::StringFilter sf;
     sf.SetFile(fileToAnon);
 
+    std::string modalitystring = "";
+    if (ds.FindDataElement(gdcm::Tag(0x0008, 0x0060))) {
+      modalitystring = sf.ToString(gdcm::Tag(0x0008, 0x0060));
+    }
+    
     // const gdcm::Image &image = reader.GetImage();
     // if we have the image here we can anonymize now and write again
 
@@ -2174,9 +2179,17 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
       for (std::map<std::string, std::string>::iterator it = params[thread].byThreadStudyInstanceUID.begin();
            it != params[thread].byThreadStudyInstanceUID.end(); ++it) {
         std::string key = it->first;
-        key.erase(key.find_last_not_of(" \n\r\t")+1);
+        //key.erase(key.find_last_not_of(" \n\r\t")+1);
         std::string value = it->second;
-        value.erase(key.find_last_not_of(" \n\r\t")+1);
+        //value.erase(key.find_last_not_of(" \n\r\t")+1);
+        if (key.length() > 1 && key[key.length()-1] == '\0') {
+          std::string::iterator it = key.end() -1;
+          key.erase(it);
+        }
+        if (value.length() > 1 && value[value.length()-1] == '\0') {
+          std::string::iterator it = value.end() -1;
+          value.erase(it);
+        }	
         uidmappings1.insert(std::pair<std::string, std::string>(key, value));
       }
     }
@@ -2184,9 +2197,17 @@ void ReadFiles(size_t nfiles, const char *filenames[], const char *outputdir, co
       for (std::map<std::string, std::string>::iterator it = params[thread].byThreadSeriesInstanceUID.begin();
            it != params[thread].byThreadSeriesInstanceUID.end(); ++it) {
         std::string key = it->first;
-        key.erase(key.find_last_not_of(" \n\r\t")+1);
+        //key.erase(key.find_last_not_of(" \n\r\t")+1);
         std::string value = it->second;
-        value.erase(key.find_last_not_of(" \n\r\t")+1);
+        //value.erase(key.find_last_not_of(" \n\r\t")+1);
+        if (key.length() > 1 && key[key.length()-1] == '\0') {
+          std::string::iterator it = key.end() -1;
+          key.erase(it);
+        }
+        if (value.length() > 1 && value[value.length()-1] == '\0') {
+          std::string::iterator it = value.end() -1;
+          value.erase(it);
+        }
         uidmappings2.insert(std::pair<std::string, std::string>(key, value));
       }
     }
