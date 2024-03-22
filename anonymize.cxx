@@ -890,10 +890,10 @@ nlohmann::json work = nlohmann::json::array({
     {"0040", "a073", "VerifyingObserverSequence",           "remove"},
     {"0040", "a027", "VerifyingOrganization",               "remove"},
     {"0038", "4000", "VisitComments",                       "keep"},
-    {"0033", "1013", "SomeSiemensMITRA",                    "remove"},
-    {"0033", "1016", "SomeSiemensMITRA",                    "remove"},
-    {"0033", "1019", "SomeSiemensMITRA",                    "remove"},
-    {"0033", "101c", "SomeSiemensMITRA",                    "remove"},
+    {"0033", "1013", "MITRA OBJECT UTF8 ATTRIBUTES 1.0",/*"SomeSiemensMITRA",*/                    "remove"},
+    {"0033", "1016", "MITRA OBJECT UTF8 ATTRIBUTES 1.0",/*"SomeSiemensMITRA",*/                    "remove"},
+    {"0033", "1019", "MITRA OBJECT UTF8 ATTRIBUTES 1.0",/*"SomeSiemensMITRA",*/                    "remove"},
+    {"0033", "101c", "MITRA OBJECT UTF8 ATTRIBUTES 1.0",/*"SomeSiemensMITRA",*/                    "remove"},
     {"0009", "1001", "SectraIdentRequestID",                "remove"},     // if 0009,0010 is SECTRA_Ident_01
     {"0009", "1002", "SectraIdentExaminationID",            "remove"}, // if 0009,0010 is SECTRA_Ident_01
     {"0071", "1022", "SIEMENS MED PT",                      "incrementdatetime"},
@@ -1124,9 +1124,9 @@ bool applyWork(gdcm::DataElement de,
   gdcm::PrivateTag phTag;
   bool isPrivateTag = false;
   if (hTag.IsPrivate()) {
-    //fprintf(stderr, "looking now for a PRIVATE TAG AS %x %x %s\n", a, b, which.c_str());
     phTag = gdcm::PrivateTag(a,b,which.c_str()); // 0x71,0x22, "SIEMENS MED PT"
     isPrivateTag = true;
+    fprintf(stderr, "looking now for a PRIVATE TAG AS %04x,%04x %s what: %s isPrivateTag: %s\n", a, b, which.c_str(), what.c_str(), isPrivateTag?"private":"public");
   }
   
   if (which == "DeIdentificationMethodCodeSequence")
@@ -1273,10 +1273,12 @@ bool applyWork(gdcm::DataElement de,
     return false;
   }
   if (what == "remove") {
-    if (isPrivateTag?ds.FindDataElement(phTag):ds.FindDataElement(hTag)) {
-      return ds.Remove( hTag ) == 1;
+    if (hTag.IsPrivate()) {
+      gdcm::PrivateTag phTag = gdcm::PrivateTag(a,b,which.c_str()); // this will only work if the 0010 entry string in which is correct
+      const gdcm::DataElement &ddee = ds.GetDataElement(phTag);
+      return ds.Remove( ddee.GetTag() ) == 1;
     }
-    return true;
+    return false;
   }
   if (what == "empty") {
     if (isPrivateTag?ds.FindDataElement(phTag):ds.FindDataElement(hTag)) {
